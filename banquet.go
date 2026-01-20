@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -125,7 +126,21 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 
 	// Populate fields using private parsers
 	b.Select = ParseSelect(b.ColumnPath)
-	b.Where = parseWhere(b.RawQuery)
+
+	// Combine query params 'where' and path conditions
+	queryWhere := parseWhere(b.RawQuery)
+	pathWhere := parsePathConditions(b.ColumnPath)
+
+	if pathWhere != "" {
+		if queryWhere != "" {
+			b.Where = queryWhere + " AND " + pathWhere
+		} else {
+			b.Where = pathWhere
+		}
+	} else {
+		b.Where = queryWhere
+	}
+
 	b.GroupBy = ParseGroupBy(b.Path, b.RawQuery)
 	// Table parsing logic
 	b.Table = parseTable(b.Path)
@@ -226,14 +241,12 @@ func parseDataSetColumnPath(rawpath string) (datasetPath string, columnPath stri
 	return rawpath, ""
 }
 
-func ParseSelect(columnPath string) []string {
+// getSegments identifies the part of the path that contains columns or conditions
+func getSegments(columnPath string) []string {
 	parts := strings.Split(columnPath, "/")
-	// If no path, return all columns
-	// Might not be relevant but doesn't harm to have it specified..
 	if len(parts) == 0 {
-		return []string{"*"}
+		return nil
 	}
-
 	startIndex := -1
 	// Find where the file/table definition ends using generic extension check
 	// We iterate from left to right to find the *first* part that looks like a file?
@@ -251,11 +264,12 @@ func ParseSelect(columnPath string) []string {
 		lastPart := parts[len(parts)-1]
 		// If last part looks like a file, we definitely don't have columns after it.
 		if path.Ext(lastPart) != "" {
-			return []string{"*"}
+			return nil
 		}
 		// Otherwise, assume the last part contains columns if it doesn't look like a file/resource?
 		// Heuristic: If it has commas or sort prefix, it's columns.
-		if strings.Contains(lastPart, ",") || strings.HasPrefix(lastPart, ASC) || strings.HasPrefix(lastPart, DESC) || strings.HasPrefix(lastPart, "^") || strings.HasPrefix(lastPart, "!^") {
+		// Added != for conditions
+		if strings.Contains(lastPart, ",") || strings.HasPrefix(lastPart, ASC) || strings.HasPrefix(lastPart, DESC) || strings.HasPrefix(lastPart, "^") || strings.HasPrefix(lastPart, "!^") || strings.Contains(lastPart, "!=") {
 			startIndex = len(parts) - 1
 		} else {
 			// If ambiguous (no indicators), assume it's part of the path (no selection)
@@ -263,14 +277,31 @@ func ParseSelect(columnPath string) []string {
 		}
 	}
 
+	if startIndex >= len(parts) {
+		return nil
+	}
+
+	return parts[startIndex:]
+}
+
+func ParseSelect(columnPath string) []string {
+	segments := getSegments(columnPath)
+	if len(segments) == 0 {
+		return []string{"*"}
+	}
+
 	var collected []string
-	for i := startIndex; i < len(parts); i++ {
-		segment := parts[i]
+	for _, segment := range segments {
 		if segment == "" {
 			continue
 		}
 		cols := strings.Split(segment, ",")
 		for _, col := range cols {
+			// Ignore conditions
+			if strings.Contains(col, "!=") {
+				continue
+			}
+
 			// Clean up sort indicators
 			col = strings.TrimPrefix(col, ASC)
 			col = strings.TrimPrefix(col, DESC)
@@ -291,6 +322,53 @@ func ParseSelect(columnPath string) []string {
 	}
 
 	return collected
+}
+
+func parsePathConditions(columnPath string) string {
+	segments := getSegments(columnPath)
+	if len(segments) == 0 {
+		return ""
+	}
+
+	var conditions []string
+	for _, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		// Conditions can be comma separated? e.g. col1!=val1,col2!=val2
+		// Assuming yes since ParseSelect splits by comma.
+		parts := strings.Split(segment, ",")
+		for _, part := range parts {
+			if strings.Contains(part, "!=") {
+				// Split
+				kv := strings.SplitN(part, "!=", 2)
+				if len(kv) == 2 {
+					col := strings.TrimSpace(kv[0])
+					val := strings.TrimSpace(kv[1])
+
+					// URL Decode value
+					decodedVal, err := url.QueryUnescape(val)
+					if err == nil {
+						val = decodedVal
+					}
+
+					// Quote if not number
+					if _, err := strconv.ParseFloat(val, 64); err != nil {
+						// Quote single quotes for SQL safety
+						val = strings.ReplaceAll(val, "'", "''")
+						val = "'" + val + "'"
+					}
+
+					conditions = append(conditions, fmt.Sprintf("%s != %s", col, val))
+				}
+			}
+		}
+	}
+
+	if len(conditions) == 0 {
+		return ""
+	}
+	return strings.Join(conditions, " AND ")
 }
 
 func parseWhere(query string) string {
@@ -345,7 +423,7 @@ func parseTable(path string) string {
 			if i+1 < len(parts) {
 				// The next part might be the table name, provided it's not a select string
 				next := parts[i+1]
-				if !strings.Contains(next, ",") && !strings.HasPrefix(next, ASC) && !strings.HasPrefix(next, DESC) {
+				if !strings.Contains(next, ",") && !strings.HasPrefix(next, ASC) && !strings.HasPrefix(next, DESC) && !strings.HasPrefix(next, "!") && !strings.Contains(next, "!=") {
 					return next
 				}
 				// If next is empty or is select/sort, then default table "sqlite_master"
@@ -361,7 +439,8 @@ func parseTable(path string) string {
 		// Check last part
 		last := parts[len(parts)-1]
 		// If last part does not look like a selector (comma, sort prefix)
-		if !strings.Contains(last, ",") && !strings.HasPrefix(last, ASC) && !strings.HasPrefix(last, DESC) && !strings.HasPrefix(last, "^") && !strings.HasPrefix(last, "!^") {
+		// Updated to include != check via ! prefix (though != starts with !) or containing !=
+		if !strings.Contains(last, ",") && !strings.HasPrefix(last, ASC) && !strings.HasPrefix(last, DESC) && !strings.HasPrefix(last, "^") && !strings.HasPrefix(last, "!^") && !strings.Contains(last, "!=") {
 			// It is likely the table (or resource)
 			// Verify it's not empty or .
 			if last != "" && last != "." {
