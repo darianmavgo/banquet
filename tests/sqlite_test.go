@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"banquet"
+	"github.com/darianmavgo/banquet"
 
 	_ "github.com/mattn/go-sqlite3"
 )
