@@ -9,7 +9,7 @@ import (
 )
 
 func TestSuperUglyUrlParseNested(t *testing.T) {
-	ugly := "http://localhost:8080/https://bucket.appspot.com:8080/v1/{banquet}/path:with;@+,$/[^]|\\< >~%25/column1,column2/^const?orderid=-1&tag=prime+val&filter={status:active}&search=~alt#fragment-top"
+	ugly := "http://localhost:8080/https://bucket.appspot.com:8080/v1/{banquet}/path:with;@+,$/[^]|\\< >~%25/column1,column2/+const?orderid=-1&tag=prime+val&filter={status:active}&search=~alt#fragment-top"
 	b, err := ParseNested(ugly)
 	if err != nil {
 		t.Errorf("Failed to parse nested URL: %v", err)
@@ -18,7 +18,7 @@ func TestSuperUglyUrlParseNested(t *testing.T) {
 	FmtPrintln(b)
 	// wants
 	wants := []string{"bucket.appspot.com:8080",
-		"/v1/{banquet}/path:with;@+,$/[^]|\\< >~%/column1,column2/^const",
+		"/v1/{banquet}/path:with;@+,$/[^]|\\< >~%/column1,column2/+const",
 		"orderid=-1&tag=prime+val&filter={status:active}&search=~alt"}
 	// gots
 	gots := []string{b.Host, b.Path, b.RawQuery}
@@ -108,7 +108,7 @@ func TestParseFromTestHtml(t *testing.T) {
 }
 
 func TestParseNested(t *testing.T) {
-	reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2/^column3?orderid=1"
+	reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2/+column3?orderid=1"
 	b, err := ParseNested(reqURL)
 	if err != nil {
 		t.Errorf("Failed to parse nested URL: %v", err)
@@ -126,8 +126,8 @@ func TestParseNested(t *testing.T) {
 	if b.Port() != "8080" {
 		t.Errorf("Port is incorrect. Got %s, expected %s", b.Port(), "8080")
 	}
-	if b.Path != "/some/file/path.csv/column1,column2/^column3" {
-		t.Errorf("Path is incorrect. Got %s, expected %s", b.Path, "/some/file/path.csv/column1,column2/^column3")
+	if b.Path != "/some/file/path.csv/column1,column2/+column3" {
+		t.Errorf("Path is incorrect. Got %s, expected %s", b.Path, "/some/file/path.csv/column1,column2/+column3")
 	}
 	if b.RawQuery != "orderid=1" {
 		t.Errorf("Query is incorrect. Got %s, expected %s", b.RawQuery, "orderid=1")
@@ -140,7 +140,7 @@ func TestParseBanquet(t *testing.T) {
 	// Bucket: bucket.appspot.com:8080 (authority)
 	// Path: /some/file/path.csv/column1,column2/^column3
 	// Query: where=age>20&limit=10&offset=5&groupby=department&having=count>1&orderby=name
-	testURL := "gs://bucket.appspot.com:8080/some/file/path.csv/column1,column2,^column3?where=age>20&limit=10&offset=5&groupby=department&having=count>1"
+	testURL := "gs://bucket.appspot.com:8080/some/file/path.csv/column1,column2,+column3?where=age>20&limit=10&offset=5&groupby=department&having=count>1"
 
 	b, err := ParseBanquet(testURL)
 	if err != nil {
@@ -201,7 +201,7 @@ func TestParseBanquet(t *testing.T) {
 }
 
 func TestParseNestedUrl(t *testing.T) {
-	reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2/^column3?orderid=1"
+	reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2,+column3?orderid=1"
 
 	banquet, err := ParseNested(reqURL)
 	if err != nil {
@@ -224,7 +224,7 @@ func TestParseNestedUrl(t *testing.T) {
 	}
 
 	// Check path
-	expectedPath := "/some/file/path.csv/column1,column2/^column3"
+	expectedPath := "/some/file/path.csv/column1,column2,+column3"
 	if banquet.Path != expectedPath {
 		t.Errorf("Path is incorrect. Got %s, expected %s", banquet.Path, expectedPath)
 	}
@@ -248,7 +248,7 @@ func TestParseNestedUrl(t *testing.T) {
 // parseSelect IS internal (lowercase). Valid in same package.
 
 func TestParseSelect(t *testing.T) {
-	afterTable := "column1,^column2,!^column3"
+	afterTable := "column1,+column2,-column3"
 	expected := []string{"column1", "column2", "column3"}
 
 	result := ParseSelect(afterTable) // Lowercase
@@ -274,5 +274,28 @@ func TestParseGroupBy(t *testing.T) {
 
 	if result != expected {
 		t.Errorf("Expected %v, but got %v", expected, result)
+	}
+}
+
+func TestParseLegacyLiteral(t *testing.T) {
+	afterTable := "^column1,!^column2"
+	// Now ^ and !^ should be treated as literal parts of the column name
+	expected := []string{"^column1", "!^column2"}
+
+	result := ParseSelect(afterTable)
+
+	if len(result) != len(expected) {
+		t.Errorf("Expected length %d, got %d", len(expected), len(result))
+	} else {
+		for i := range result {
+			if result[i] != expected[i] {
+				t.Errorf("Expected Select[%d] = '%s', got '%s'", i, expected[i], result[i])
+			}
+		}
+	}
+
+	ob, dir := parseOrderBy(afterTable, "")
+	if ob != "" || dir != "" {
+		t.Errorf("Expected no OrderBy for legacy literals, got %s (%s)", ob, dir)
 	}
 }

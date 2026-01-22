@@ -2,11 +2,24 @@ package banquet
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"path"
 	"strconv"
 	"strings"
 )
+
+var verbose bool
+
+// SetVerbose enables or disables verbose logging for the package.
+func SetVerbose(v bool) {
+	verbose = v
+}
+
+// IsVerbose returns true if verbose logging is enabled.
+func IsVerbose() bool {
+	return verbose
+}
 
 // Banquet package and Banquet struct are designed to provide a URL standardization and parsing framework for tabular data.
 // What will banquet have the url.URL doesn't?
@@ -109,11 +122,21 @@ func CleanUrl(rawurl string) string {
 
 // go DOES NOT support override of URL.Parse so instead we will use a factory function.
 func ParseBanquet(rawurl string) (*Banquet, error) {
+	if verbose {
+		log.Printf("[BANQUET] Parsing URL: %s", rawurl)
+	}
 	// Standardize/Clean the URL (trim leading slash, fix scheme)
 	rawurl = CleanUrl(rawurl)
 
+	if verbose {
+		log.Printf("[BANQUET] Cleaned URL: %s", rawurl)
+	}
+
 	u, err := url.Parse(rawurl)
 	if err != nil {
+		if verbose {
+			log.Printf("[BANQUET] URL parse error: %v", err)
+		}
 		return nil, err
 	}
 
@@ -123,9 +146,15 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 	}
 
 	b.DataSetPath, b.ColumnPath = parseDataSetColumnPath(b.Path)
+	if verbose {
+		log.Printf("[BANQUET] DataSetPath: %s, ColumnPath: %s", b.DataSetPath, b.ColumnPath)
+	}
 
 	// Populate fields using private parsers
 	b.Select = ParseSelect(b.ColumnPath)
+	if verbose {
+		log.Printf("[BANQUET] Selected columns: %v", b.Select)
+	}
 
 	// Combine query params 'where' and path conditions
 	queryWhere := parseWhere(b.RawQuery)
@@ -141,9 +170,16 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 		b.Where = queryWhere
 	}
 
+	if verbose && b.Where != "" {
+		log.Printf("[BANQUET] effective WHERE: %s", b.Where)
+	}
+
 	b.GroupBy = ParseGroupBy(b.Path, b.RawQuery)
 	// Table parsing logic
 	b.Table = parseTable(b.Path)
+	if verbose {
+		log.Printf("[BANQUET] Table identified: %s", b.Table)
+	}
 
 	b.Limit = parseLimit(b.RawQuery, b.Path)
 	b.Offset = parseOffset(b.RawQuery, b.Path)
@@ -269,7 +305,7 @@ func getSegments(columnPath string) []string {
 		// Otherwise, assume the last part contains columns if it doesn't look like a file/resource?
 		// Heuristic: If it has commas or sort prefix, it's columns.
 		// Added != for conditions
-		if strings.Contains(lastPart, ",") || strings.HasPrefix(lastPart, ASC) || strings.HasPrefix(lastPart, DESC) || strings.HasPrefix(lastPart, "^") || strings.HasPrefix(lastPart, "!^") || strings.Contains(lastPart, "!=") {
+		if strings.Contains(lastPart, ",") || strings.HasPrefix(lastPart, ASC) || strings.HasPrefix(lastPart, DESC) || strings.Contains(lastPart, "!=") {
 			startIndex = len(parts) - 1
 		} else {
 			// If ambiguous (no indicators), assume it's part of the path (no selection)
@@ -305,9 +341,6 @@ func ParseSelect(columnPath string) []string {
 			// Clean up sort indicators
 			col = strings.TrimPrefix(col, ASC)
 			col = strings.TrimPrefix(col, DESC)
-			// Legacy support
-			col = strings.TrimPrefix(col, "^")
-			col = strings.TrimPrefix(col, "!^")
 
 			// Basic cleanup
 			col = strings.TrimSpace(col)
@@ -440,7 +473,7 @@ func parseTable(path string) string {
 		last := parts[len(parts)-1]
 		// If last part does not look like a selector (comma, sort prefix)
 		// Updated to include != check via ! prefix (though != starts with !) or containing !=
-		if !strings.Contains(last, ",") && !strings.HasPrefix(last, ASC) && !strings.HasPrefix(last, DESC) && !strings.HasPrefix(last, "^") && !strings.HasPrefix(last, "!^") && !strings.Contains(last, "!=") {
+		if !strings.Contains(last, ",") && !strings.HasPrefix(last, ASC) && !strings.HasPrefix(last, DESC) && !strings.Contains(last, "!=") {
 			// It is likely the table (or resource)
 			// Verify it's not empty or .
 			if last != "" && last != "." {
@@ -503,12 +536,6 @@ func parseOrderBy(columnPath string, query string) (string, string) {
 			}
 			if strings.HasPrefix(col, DESC) {
 				return strings.TrimPrefix(col, DESC), "DESC"
-			}
-			if strings.HasPrefix(col, "^") {
-				return strings.TrimPrefix(col, "^"), "ASC"
-			}
-			if strings.HasPrefix(col, "!^") {
-				return strings.TrimPrefix(col, "!^"), "DESC"
 			}
 		}
 	}
