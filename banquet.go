@@ -328,6 +328,10 @@ func ParseSelect(columnPath string) []string {
 
 	var collected []string
 	for _, segment := range segments {
+		// Ignore slice notation
+		if strings.HasPrefix(segment, "[") && strings.HasSuffix(segment, "]") && strings.Contains(segment, ":") {
+			continue
+		}
 		if segment == "" {
 			continue
 		}
@@ -499,10 +503,9 @@ func parseLimit(query string, path string) string {
 		return l
 	}
 	// Check path for slice notation [offset:limit]
-	// This was in core/parse.go... logic to extract slice
-	// For simple implementation we just check query for now unless slice parsing is critical from path strings
-	// If slice notation support is requested in comments (point 9), we should implement it.
-	// Heuristic: check last part of path for [x:y]
+	if limit, _ := parseSlice(path); limit != "" {
+		return limit
+	}
 	return ""
 }
 
@@ -511,7 +514,8 @@ func parseOffset(query string, path string) string {
 	if o := v.Get("offset"); o != "" {
 		return o
 	}
-	return ""
+	_, offset := parseSlice(path)
+	return offset
 }
 
 func parseHaving(query string) string {
@@ -540,4 +544,56 @@ func parseOrderBy(columnPath string, query string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+func parseSlice(pathStr string) (string, string) {
+	if !strings.HasSuffix(pathStr, "]") {
+		return "", ""
+	}
+	idx := strings.LastIndex(pathStr, "[")
+	if idx == -1 {
+		return "", ""
+	}
+	content := pathStr[idx+1 : len(pathStr)-1]
+	parts := strings.Split(content, ":")
+	if len(parts) != 2 {
+		return "", ""
+	}
+
+	startStr := strings.TrimSpace(parts[0])
+	endStr := strings.TrimSpace(parts[1])
+
+	start := 0
+	end := 0
+	hasLimit := false
+
+	if startStr != "" {
+		s, err := strconv.Atoi(startStr)
+		if err != nil {
+			return "", ""
+		}
+		start = s
+	}
+
+	if endStr != "" {
+		e, err := strconv.Atoi(endStr)
+		if err != nil {
+			return "", ""
+		}
+		end = e
+		hasLimit = true
+	}
+
+	offset := start
+	limit := ""
+
+	if hasLimit {
+		l := end - start
+		if l < 0 {
+			l = 0
+		}
+		limit = strconv.Itoa(l)
+	}
+
+	return limit, strconv.Itoa(offset)
 }
