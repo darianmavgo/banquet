@@ -453,8 +453,16 @@ func parseTable(path string) string {
 
 	for i := 0; i < len(parts); i++ {
 		part := parts[i]
-		if strings.HasSuffix(part, ".csv") {
-			return "tb0"
+		if strings.HasSuffix(part, ".csv") ||
+			strings.HasSuffix(part, ".xlsx") ||
+			strings.HasSuffix(part, ".xls") ||
+			strings.HasSuffix(part, ".json") ||
+			strings.HasSuffix(part, ".html") ||
+			strings.HasSuffix(part, ".htm") ||
+			strings.HasSuffix(part, ".txt") ||
+			strings.HasSuffix(part, ".md") ||
+			strings.HasSuffix(part, ".zip") {
+			return ""
 		}
 		if strings.HasSuffix(part, ".sqlite") || strings.HasSuffix(part, ".db") {
 			if i+1 < len(parts) {
