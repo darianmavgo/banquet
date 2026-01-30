@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"path"
 	"strconv"
 	"strings"
 )
@@ -150,10 +149,21 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 		log.Printf("[BANQUET] DataSetPath: %s, ColumnPath: %s", b.DataSetPath, b.ColumnPath)
 	}
 
+	// Table parsing logic
+	b.Table = parseTable(b.Path)
+	if verbose {
+		log.Printf("[BANQUET] Table identified: %s", b.Table)
+	}
+
 	// Populate fields using private parsers
 	b.Select = ParseSelect(b.ColumnPath)
 	if verbose {
 		log.Printf("[BANQUET] Selected columns: %v", b.Select)
+	}
+
+	// Fix: if Select is just the Table name, change to *
+	if len(b.Select) == 1 && b.Select[0] == b.Table {
+		b.Select = []string{"*"}
 	}
 
 	// Combine query params 'where' and path conditions
@@ -175,11 +185,6 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 	}
 
 	b.GroupBy = ParseGroupBy(b.Path, b.RawQuery)
-	// Table parsing logic
-	b.Table = parseTable(b.Path)
-	if verbose {
-		log.Printf("[BANQUET] Table identified: %s", b.Table)
-	}
 
 	b.Limit = parseLimit(b.RawQuery, b.Path)
 	b.Offset = parseOffset(b.RawQuery, b.Path)
@@ -280,44 +285,29 @@ func parseDataSetColumnPath(rawpath string) (datasetPath string, columnPath stri
 // getSegments identifies the part of the path that contains columns or conditions
 func getSegments(columnPath string) []string {
 	parts := strings.Split(columnPath, "/")
-	if len(parts) == 0 {
+	if len(parts) == 0 || (len(parts) == 1 && parts[0] == "") {
 		return nil
 	}
-	startIndex := -1
-	// Find where the file/table definition ends using generic extension check
-	// We iterate from left to right to find the *first* part that looks like a file?
-	// Or last? Usually path/to/file.ext/col1.
-	// Current logic was first match. Let's stick to first match.
+
+	// Find the first segment that contains clear column/sort/condition indicators
+	firstClearSegment := -1
 	for i, part := range parts {
-		if path.Ext(part) != "" {
-			startIndex = i + 1
+		if strings.Contains(part, ",") ||
+			strings.HasPrefix(part, ASC) ||
+			strings.HasPrefix(part, DESC) ||
+			strings.Contains(part, "!=") ||
+			(strings.HasPrefix(part, "[") && strings.Contains(part, ":")) {
+			firstClearSegment = i
 			break
 		}
 	}
 
-	// If no file extension found, fall back to checking strict last part
-	if startIndex == -1 {
-		lastPart := parts[len(parts)-1]
-		// If last part looks like a file, we definitely don't have columns after it.
-		if path.Ext(lastPart) != "" {
-			return nil
-		}
-		// Otherwise, assume the last part contains columns if it doesn't look like a file/resource?
-		// Heuristic: If it has commas or sort prefix, it's columns.
-		// Added != for conditions
-		if strings.Contains(lastPart, ",") || strings.HasPrefix(lastPart, ASC) || strings.HasPrefix(lastPart, DESC) || strings.Contains(lastPart, "!=") {
-			startIndex = len(parts) - 1
-		} else {
-			// If ambiguous (no indicators), assume it's part of the path (no selection)
-			startIndex = len(parts) - 1
-		}
+	if firstClearSegment != -1 {
+		return parts[firstClearSegment:]
 	}
 
-	if startIndex >= len(parts) {
-		return nil
-	}
-
-	return parts[startIndex:]
+	// If no indicators, just return the last segment (could be table or single column)
+	return parts[len(parts)-1:]
 }
 
 func ParseSelect(columnPath string) []string {
@@ -342,9 +332,16 @@ func ParseSelect(columnPath string) []string {
 				continue
 			}
 
-			// Clean up sort indicators
-			col = strings.TrimPrefix(col, ASC)
-			col = strings.TrimPrefix(col, DESC)
+			// If it has a sort prefix, it's for ordering, not necessarily for selection.
+			// In banquet, table/+id implies SELECT * FROM table ORDER BY id ASC.
+			if strings.HasPrefix(col, ASC) || strings.HasPrefix(col, DESC) {
+				continue
+			}
+
+			// Clean up slice notation
+			if idx := strings.Index(col, "["); idx != -1 {
+				col = col[:idx]
+			}
 
 			// Basic cleanup
 			col = strings.TrimSpace(col)
@@ -409,12 +406,23 @@ func parsePathConditions(columnPath string) string {
 }
 
 func parseWhere(query string) string {
-	// Simple extraction of 'where' parameter
-	v, err := url.ParseQuery(query)
-	if err != nil {
+	if query == "" {
 		return ""
 	}
-	return v.Get("where")
+	// Simple extraction of 'where' parameter
+	// url.ParseQuery is too strict for Banquet's "unescape tolerant" goal.
+	params := strings.Split(query, "&")
+	for _, p := range params {
+		if strings.HasPrefix(p, "where=") {
+			val := strings.TrimPrefix(p, "where=")
+			// Try to unescape but if it fails, just return the raw value
+			if decoded, err := url.QueryUnescape(val); err == nil {
+				return decoded
+			}
+			return val
+		}
+	}
+	return ""
 }
 
 func ParseGroupBy(path string, query string) string {
@@ -468,7 +476,11 @@ func parseTable(path string) string {
 			if i+1 < len(parts) {
 				// The next part might be the table name, provided it's not a select string
 				next := parts[i+1]
-				if !strings.Contains(next, ",") && !strings.HasPrefix(next, ASC) && !strings.HasPrefix(next, DESC) && !strings.HasPrefix(next, "!") && !strings.Contains(next, "!=") {
+				// Strip slice notation if present
+				if idx := strings.Index(next, "["); idx != -1 {
+					next = next[:idx]
+				}
+				if next != "" && !strings.Contains(next, ",") && !strings.HasPrefix(next, ASC) && !strings.HasPrefix(next, DESC) && !strings.HasPrefix(next, "!") && !strings.Contains(next, "!=") {
 					return next
 				}
 				// If next is empty or is select/sort, then default table "sqlite_master"
@@ -543,6 +555,10 @@ func parseOrderBy(columnPath string, query string) (string, string) {
 		cols := strings.Split(part, ",")
 		for _, col := range cols {
 			col = strings.TrimSpace(col)
+			// Strip slice notation
+			if idx := strings.Index(col, "["); idx != -1 {
+				col = col[:idx]
+			}
 			if strings.HasPrefix(col, ASC) {
 				return strings.TrimPrefix(col, ASC), "ASC"
 			}
