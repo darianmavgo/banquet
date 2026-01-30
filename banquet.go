@@ -106,7 +106,9 @@ reqURL := "http://localhost:8080/data.csv/^column1"
 // Trims leading slash, fixes scheme format, but expecting more cleanings as we go.
 func CleanUrl(rawurl string) string {
 	// housekeeping before url.Parse
-	// 1. Trim leading slash if left over from http.Request
+	if rawurl == "/" {
+		return "."
+	}
 	rawurl = strings.TrimPrefix(rawurl, "/")
 
 	// Ensure standard scheme format (e.g., gs:/ -> gs://) for proper authority parsing
@@ -203,12 +205,17 @@ func FmtPrintln(b *Banquet) {
 	fmt.Printf(`rawurl: %s
 Scheme: %s
   Host:   %s
-  Path:   %s
+  DataSetPath: %s
+  ColumnPath: %s
   RawQuery: %s
-  Where:      %q
   Table:      %q
-  Limit:      %q
-`, b.rawurl, b.Scheme, b.Host, b.Path, b.RawQuery, b.Where, b.Table, b.Limit)
+`, b.rawurl, b.Scheme, b.Host, b.DataSetPath, b.ColumnPath, b.RawQuery, b.Table)
+}
+
+func FmtSprintf(b *Banquet) string {
+	return fmt.Sprintf(`rawurl: %s\n
+  S: %s H: %s DP: %sCP: %sRQ:%sTB:%q
+`, b.rawurl, b.Scheme, b.Host, b.DataSetPath, b.ColumnPath, b.RawQuery, b.Table)
 }
 
 // Don't create func Parse(rawurl string) (*Banquet, error) we basically have that in url.Parse
@@ -218,8 +225,8 @@ Scheme: %s
 func ParseNested(rawURL string) (*Banquet, error) {
 	// 1. Parse the outer envelope
 	// If rawURL is http://localhost..., url.Parse works.
-	// If rawURL is just /http..., we need to trim prefix.
-	if strings.HasPrefix(rawURL, "/") {
+	// If rawURL is just /http..., we need to trim prefix, but not if it's just "/"
+	if rawURL != "/" {
 		rawURL = strings.TrimPrefix(rawURL, "/")
 	}
 
