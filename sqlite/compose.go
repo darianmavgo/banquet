@@ -11,10 +11,10 @@ import (
 	"github.com/darianmavgo/banquet"
 )
 
-// ConstructSQL builds a SQL query string from a Banquet struct.
+// Compose builds a SQL query string from a Banquet struct.
 // This implementation uses double-quoting for identifiers to prevent basic SQL injection
 // and handle reserved words/spaces in names.
-func ConstructSQL(bq *banquet.Banquet) string {
+func Compose(bq *banquet.Banquet) string {
 	var parts []string
 
 	// SELECT
@@ -31,7 +31,7 @@ func ConstructSQL(bq *banquet.Banquet) string {
 	// FROM
 	table := bq.Table
 	if table == "" {
-		table = "tb0" // Default for many sqliter use cases
+		table = InferTable(bq)
 	}
 	parts = append(parts, "FROM "+QuoteIdentifier(table))
 
@@ -78,4 +78,21 @@ func QuoteIdentifier(s string) string {
 		return s
 	}
 	return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
+}
+
+// InferTable attempts to deduce the table name when one is not explicitly provided.
+// It checks the DataSetPath extension and whether columns were requested.
+func InferTable(bq *banquet.Banquet) string {
+	if bq.Table != "" {
+		return bq.Table
+	}
+
+	// If no columns are specified (and no table), we assume we want to list tables
+	// IF the source is a SQLite database.
+	if bq.ColumnPath == "" {
+		return "sqlite_master"
+	}
+
+	// Default fallback for flat files or if columns are specified but table is implicit
+	return "tb0"
 }

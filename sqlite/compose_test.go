@@ -91,6 +91,16 @@ func TestConstructSQL(t *testing.T) {
 			url:      "data.sqlite/users/id,name?where=name LIKE 'A%'",
 			expected: "SELECT \"id\", \"name\" FROM \"users\" WHERE name LIKE 'A%'",
 		},
+		{
+			// Empty table for SQLite without columns -> sqlite_master
+			url:      "data.sqlite",
+			expected: "SELECT * FROM \"sqlite_master\"",
+		},
+		{
+			// Empty table for CSV -> tb0
+			url:      "data.csv",
+			expected: "SELECT * FROM \"tb0\"",
+		},
 	}
 
 	for _, tt := range tests {
@@ -99,7 +109,7 @@ func TestConstructSQL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseBanquet(%q) error: %v", tt.url, err)
 			}
-			got := ConstructSQL(bq)
+			got := Compose(bq)
 			if got != tt.expected {
 				t.Errorf("ConstructSQL() = %q, want %q", got, tt.expected)
 			}

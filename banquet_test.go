@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+func TestLog(t *testing.T) {
+
+	fmt.Printf("--- START: %s\n", t.Name())
+}
+
 func TestSuperUglyUrlParseNested(t *testing.T) {
 	ugly := "http://localhost:8080/https://bucket.appspot.com:8080/v1/{banquet}/path:with;@+,$/[^]|\\< >~%25/column1,column2/+const?orderid=-1&tag=prime+val&filter={status:active}&search=~alt#fragment-top"
 	b, err := ParseNested(ugly)
@@ -267,6 +272,7 @@ func TestParseSelect(t *testing.T) {
 }
 
 func TestParseGroupBy(t *testing.T) {
+	TestLog(t)
 	afterPart := "some_column(group_column)"
 	expected := "group_column"
 

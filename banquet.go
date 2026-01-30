@@ -1,3 +1,19 @@
+// Package banquet provides a framework for standardizing and parsing URLs for tabular data access.
+// It supports querying datasets (CSV, SQLite, etc.) via URL paths and query parameters, allowing typical SQL-like operations
+// such as selection, filtering, sorting, limiting, and grouping directly from the URL.
+//
+// Banquet Classifications & URL Structure:
+//
+// 1. Flat (1-tier): path/to/dataset;;Column
+// 2. Nested Table (2-tier): path/to/dataset;Table
+// 3. Nested Column (2-tier): path/to/dataset;Table;Column
+//
+// Fallback Convention (semicolon-less):
+// If no semicolons are present, the package attempts to heuristically determine the table or column based on file usage.
+//
+// Supported Prefixes/Suffixes:
+// - Sort: +column (ASC), -column (DESC)
+// - Slice: [start:end] (translated to LIMIT/OFFSET)
 package banquet
 
 import (
@@ -20,95 +36,36 @@ func IsVerbose() bool {
 	return verbose
 }
 
-// Banquet package and Banquet struct are designed to provide a URL standardization and parsing framework for tabular data.
-// What will banquet have the url.URL doesn't?
-// 1. Where clause
-// 2. Select clause
-// 3. Sort clause
-// 4. Limit clause
-// 5. Offset clause
-// 6. Group by clause
-// 7. Having clause
-// 8. Order by clause
-// 9. Slice Notation [2:30] inspired by python and golang to signal subset of rows.
-// 10. Special characters to signal sorting direction, ascending or descending.
-// 11. Repurpose userinfo to signal authentication.
-// 12. Repurpose path to signal file path or db path or object key or zip file path.
-// 13. Repurpose query to signal query parameters.
-// 14. Lots of tolerance for unescaped characters.
-// ColumnPath is the path to the column.
+// Banquet represents a parsed URL request for tabular data.
+// It extends url.URL with SQL-like clauses derived from the path and query parameters.
 type Banquet struct {
 	*url.URL
 	Where         string
-	Table         string   // table name to go in FROM clause parsed from request url
-	Select        []string // columns to select.  empty or * means all columns
-	SortDirection string   // refactor this to mean ASC or DESC. We have OrderBy for previous Sort meaning.
+	Table         string   // Table name derived from the URL path.
+	Select        []string // Columns to select. Empty or ["*"] implies all columns.
+	SortDirection string   // "ASC" or "DESC".
 	Limit         string
 	Offset        string
 	GroupBy       string
 	Having        string
 	OrderBy       string
-	DataSetPath   string // Server needs this to respond with the downloadable, convedata set. Excel, CSV, eventually BigQuery dataset.
+	DataSetPath   string // Path to the source dataset file (e.g., .csv, .sqlite).
 
-	ColumnPath string // Formatted table/column1, column2. Empty means select * from dataset that only has one table..
+	ColumnPath string // The remaining path segment containing columns, sort intructions, or conditions.
 	// fields below are for internal use
 	rawurl string
 	path   string
 }
 
 const (
-	// Sort direction tokens
-	ASC  = "+" // token to signal the following column is sorted ascending
-	DESC = "-" // token to signal the following column is sorted descending
-
+	// ASC is the prefix token to signal ascending sort order.
+	ASC = "+"
+	// DESC is the prefix token to signal descending sort order.
+	DESC = "-"
 )
 
-/*
-// General form of a URL:
-//
-//	[scheme:][//[userinfo@]host][/]path[?query][#fragment]
-*/
-/* General form of a Banquet:
-//
-Familiar form:
-//	[scheme:][//[userinfo@]host][/]path/to/dataset/table/column1,column2,column3...?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
-Since I can't find a way to signal a priori that path part is table vs column name vs file path, we will use a convention
-Canonical form:
-[scheme:][//[userinfo@]host][/]path/to/dataset;table/column1,column2,column3...?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
-Canonical form if for single table sources:
-[scheme:][//[userinfo@]host][/]path/to/dataset;column1,column2,column3...?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
-
-Ambiguous form:
-[scheme:][//[userinfo@]host][/]path/to/dataset/tableorcolumn?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
-
-// List of prefixes to support
-//  + and - prefixed to column name signals sorting on that column.
-//  [number:number] signals slice notation. It gets translated to limit and offset.
-//  TBD signals group by.
-//  TBD signals having.
-//  TBD signals order by.
-// List of suffixes to support
-//  Suffixes such as file ending are so important to parsing that I will probably avoid more suffixes.
-*/
-
-/*Example Banquet Unparseable	reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2/^column3?orderid=1"
-Files found in tests:
-reqURL := "/gs://wc2022-356423.appspot.com/Expenses.csv/%5EDescription"
-reqURL := "gs:///wc2022-356423.appspot.com/Expenses.csv/^Description"
-testURL := "https://raw.githubusercontent.com/uiuc-cse/data-fa14/gh-pages/data/iris.csv"
-testURL := "https://raw.githubusercontent.com/holtzy/data_to_viz/master/Example_dataset/1_OneNum.csv"
-testURL := "https://raw.githubusercontent.com/uiuc-cse/data-fa14/gh-pages/data/iris.csv"
-reqURL := "https://localhost:8080/gs:/matrix@bucket.appspot.com:8080/some/file/path.csv/column1,column2/^column3?orderid=1"
-reqURL := "https://localhost:8080/gs:/some/file/path.csv/column1,column2/^column3?where=1=1"
-reqURL := "gs:/maverick@buckt1.appspot.com/some/file/path.csv/column1,column2/^column3?where=1=1"
-reqURL := "http://localhost:8080/sample%20data/demo%20mavgo%20flight/Expenses.csv"
-reqURL := "http://localhost:8080/data.csv/^column1"
-*/
-
-// A big UI incompatibility is that I hate url escape sequences.
-
-// So unescape tolerant parsing need to be here. ! PathUnescape already exists. !
-// Trims leading slash, fixes scheme format, but expecting more cleanings as we go.
+// CleanUrl prepares a raw URL string for standard parsing.
+// It trims leading slashes (unless it's the root path) and ensures standard scheme formatting.
 func CleanUrl(rawurl string) string {
 	// housekeeping before url.Parse
 	if rawurl == "/" {
@@ -126,7 +83,8 @@ func CleanUrl(rawurl string) string {
 	return rawurl
 }
 
-// go DOES NOT support override of URL.Parse so instead we will use a factory function.
+// ParseBanquet parses a raw URL string into a functioning Banquet object.
+// It handles cleaning, URL parsing, and decomposition into Dataset, Table, and Column path segments.
 func ParseBanquet(rawurl string) (*Banquet, error) {
 	if verbose {
 		log.Printf("[BANQUET] Parsing URL: %s", rawurl)
@@ -225,10 +183,8 @@ func FmtSprintf(b *Banquet) string {
 `, b.rawurl, b.Scheme, b.Host, b.DataSetPath, b.ColumnPath, b.RawQuery, b.Table)
 }
 
-// Don't create func Parse(rawurl string) (*Banquet, error) we basically have that in url.Parse
-
-// ParseNested is a factory function that creates a new Banquet from Banquet URL nested in an outer URL.
-// Expecting this a lot from http.Request.
+// ParseNested extracts and parses a Banquet URL that wraps an inner URL.
+// This is common when a server receives a request like "http://localhost/gs://bucket/file...".
 func ParseNested(rawURL string) (*Banquet, error) {
 	// 1. Parse the outer envelope
 	// If rawURL is http://localhost..., url.Parse works.
@@ -267,7 +223,8 @@ func ParseNested(rawURL string) (*Banquet, error) {
 	return b, nil
 }
 
-// Internal parsing functions
+// parseDataSetColumnPath splits the raw path into dataset, table, and column segments.
+// It supports explicit tiers separated by semicolons (dataset;table;column) or implicit tiers based on file extensions.
 func parseDataSetColumnPath(rawpath string) (datasetPath string, table string, columnPath string) {
 	// If rawpath contains semicolons, we use explicit tier parsing: dataset;table;columns
 	if strings.Contains(rawpath, ";") {
@@ -465,7 +422,10 @@ func ParseGroupBy(path string, query string) string {
 	return ""
 }
 
-// parseSort function deleted as it is superseded by parseOrderBy and parseSortStr
+// parseTable attempts to identify the table from the path.
+// This is a simplified version and might need robust logic akin to core/parse.go eventually.
+// parseTable parses /<table_name>/column, column
+// However on sources like csv it's possible to have /column since csv 1 table.
 func parseTable(columnPath string) string {
 	if columnPath == "" {
 		return ""
