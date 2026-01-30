@@ -75,7 +75,12 @@ Familiar form:
 Since I can't find a way to signal a priori that path part is table vs column name vs file path, we will use a convention
 Canonical form:
 [scheme:][//[userinfo@]host][/]path/to/dataset;table/column1,column2,column3...?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
-//
+Canonical form if for single table sources:
+[scheme:][//[userinfo@]host][/]path/to/dataset;column1,column2,column3...?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
+
+Ambiguous form:
+[scheme:][//[userinfo@]host][/]path/to/dataset/tableorcolumn?[where][select][sort][limit][offset][groupby][having][orderby][slice][#fragment]
+
 // List of prefixes to support
 //  + and - prefixed to column name signals sorting on that column.
 //  [number:number] signals slice notation. It gets translated to limit and offset.
@@ -146,15 +151,17 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 		rawurl: rawurl,
 	}
 
-	b.DataSetPath, b.ColumnPath = parseDataSetColumnPath(b.Path)
+	b.DataSetPath, b.Table, b.ColumnPath = parseDataSetColumnPath(b.Path)
 	if verbose {
-		log.Printf("[BANQUET] DataSetPath: %s, ColumnPath: %s", b.DataSetPath, b.ColumnPath)
+		log.Printf("[BANQUET] DataSetPath: %s, Table: %q, ColumnPath: %s", b.DataSetPath, b.Table, b.ColumnPath)
 	}
 
-	// Table parsing logic
-	b.Table = parseTable(b.Path)
-	if verbose {
-		log.Printf("[BANQUET] Table identified: %s", b.Table)
+	// Table parsing logic - fallback to heuristic only if not explicitly set via semicolon
+	if b.Table == "" {
+		b.Table = parseTable(b.ColumnPath)
+		if verbose {
+			log.Printf("[BANQUET] Table identified via heuristic: %s", b.Table)
+		}
 	}
 
 	// Populate fields using private parsers
@@ -261,10 +268,18 @@ func ParseNested(rawURL string) (*Banquet, error) {
 }
 
 // Internal parsing functions
-func parseDataSetColumnPath(rawpath string) (datasetPath string, columnPath string) {
-	// if rawpath contains ";" first part is dataset pathrawpath second part is columnpathrawpath
-	if idx := strings.Index(rawpath, ";"); idx != -1 {
-		return rawpath[:idx], rawpath[idx+1:]
+func parseDataSetColumnPath(rawpath string) (datasetPath string, table string, columnPath string) {
+	// If rawpath contains semicolons, we use explicit tier parsing: dataset;table;columns
+	if strings.Contains(rawpath, ";") {
+		parts := strings.SplitN(rawpath, ";", 3)
+		datasetPath = parts[0]
+		if len(parts) > 1 {
+			table = parts[1]
+		}
+		if len(parts) > 2 {
+			columnPath = parts[2]
+		}
+		return
 	}
 
 	// if there is no ";" then use existing file extension logic to split path into dataset path and column path
@@ -283,10 +298,10 @@ func parseDataSetColumnPath(rawpath string) (datasetPath string, columnPath stri
 			if i+1 < len(parts) {
 				columnPath = strings.Join(parts[i+1:], "/")
 			}
-			return
+			return datasetPath, "", columnPath
 		}
 	}
-	return rawpath, ""
+	return rawpath, "", ""
 }
 
 // getSegments identifies the part of the path that contains columns or conditions
@@ -451,77 +466,36 @@ func ParseGroupBy(path string, query string) string {
 }
 
 // parseSort function deleted as it is superseded by parseOrderBy and parseSortStr
-
-// parseTable attempts to identify the table from the path.
-// This is a simplified version and might need robust logic akin to core/parse.go eventually.
-func parseTable(path string) string {
-	parts := strings.Split(path, "/")
-	// Iterate backwards.
-	// The last part is usually select/sort or slice.
-	// The part before that might be the table.
-	// If the file extension is .csv, table is effectively the file (or "tb0" per core).
-	// If .sqlite, next part is table.
-
-	// For now, heuristic:
-	// If part has extension .csv, return "tb0".
-	// If part has extension .sqlite, look at next part.
-
-	for i := 0; i < len(parts); i++ {
-		part := parts[i]
-		if strings.HasSuffix(part, ".csv") ||
-			strings.HasSuffix(part, ".xlsx") ||
-			strings.HasSuffix(part, ".xls") ||
-			strings.HasSuffix(part, ".json") ||
-			strings.HasSuffix(part, ".html") ||
-			strings.HasSuffix(part, ".htm") ||
-			strings.HasSuffix(part, ".txt") ||
-			strings.HasSuffix(part, ".md") ||
-			strings.HasSuffix(part, ".zip") {
-			return ""
-		}
-		if strings.HasSuffix(part, ".sqlite") || strings.HasSuffix(part, ".db") {
-			if i+1 < len(parts) {
-				// The next part might be the table name, provided it's not a select string
-				next := parts[i+1]
-				// Strip slice notation if present
-				if idx := strings.Index(next, "["); idx != -1 {
-					next = next[:idx]
-				}
-				if next != "" && !strings.Contains(next, ",") && !strings.HasPrefix(next, ASC) && !strings.HasPrefix(next, DESC) && !strings.HasPrefix(next, "!") && !strings.Contains(next, "!=") {
-					return next
-				}
-				// If next is empty or is select/sort, then default table "sqlite_master"
-				return "sqlite_master"
-			}
-			return "sqlite_master"
-		}
+func parseTable(columnPath string) string {
+	if columnPath == "" {
+		return ""
+	}
+	// Trim slashes and split
+	parts := strings.Split(strings.Trim(columnPath, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
 	}
 
-	// Fallback/Generic behavior for non-file paths or unknown structure
-	// If structure is table/selector
-	if len(parts) >= 1 {
-		// Check last part
-		last := parts[len(parts)-1]
-		// If last part does not look like a selector (comma, sort prefix)
-		// Updated to include != check via ! prefix (though != starts with !) or containing !=
-		if !strings.Contains(last, ",") && !strings.HasPrefix(last, ASC) && !strings.HasPrefix(last, DESC) && !strings.Contains(last, "!=") {
-			// It is likely the table (or resource)
-			// Verify it's not empty or .
-			if last != "" && last != "." {
-				return last
-			}
-		}
+	first := parts[0]
 
-		// If last part IS a selector, then table is previous part
-		if len(parts) >= 2 {
-			p := parts[len(parts)-2]
-			if p != "" && !strings.Contains(p, ".") {
-				return p
-			}
-		}
+	// Indicators that this segment is a selector (column list, sort, or filter) and NOT a table name.
+	// Comparison operators, commas, and sort prefixes are clear structural clues.
+	if strings.Contains(first, ",") ||
+		strings.HasPrefix(first, ASC) ||
+		strings.HasPrefix(first, DESC) ||
+		strings.Contains(first, "!=") ||
+		strings.Contains(first, "=") ||
+		strings.Contains(first, ">") ||
+		strings.Contains(first, "<") ||
+		(strings.HasPrefix(first, "[") && strings.Contains(first, ":")) {
+		return ""
 	}
 
-	return ""
+	// Heuristic: If it's not a selector, it's likely a table or resource name.
+	// This works for SQLite (db.sqlite/users) and handles CSV (file.csv/col1,col2) correctly.
+	// For ambiguous single segments like /column, it will tentatively return it as a table;
+	// downstream logic in ParseBanquet handles the table/column overlap.
+	return first
 }
 
 func parseLimit(query string, path string) string {
