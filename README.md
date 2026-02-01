@@ -1,40 +1,64 @@
+# Banquet
 
-Banquet is a superset of net/url for querying tabular data. 
-I didn't want to make a contraction from tabular data url because the obvious word play is "turtle" but I definitely don't want to imply slowness of any kind. 
+Banquet is a URL parsing library designed to standardize the way tabular data is queried over HTTP. It provides a superset of `net/url` features, enabling SQL-like operations (selection, filtering, sorting, pagination) directly within the URL structure.
 
-So banquet because is the moniker because banquets have tables everywhere with abundance.
+## Features Supported
 
-### Overview
+*   **Standardized URL Parsing**: Converts raw URLs into structured `Banquet` objects containing dataset paths, tables, columns, and query clauses.
+*   **Dual-Mode Parsing**: Supports both explicit, delimiter-based paths and heuristic, "familiar" paths.
+*   **SQL Clause Extraction**: Automatically parses `SELECT`, `WHERE`, `ORDER BY`, `LIMIT`, `OFFSET`, `GROUP BY`, and `HAVING` from both path segments and query parameters.
+*   **Nested URL Support**: Can parse URLs embedded within other URLs (common in proxying or gateway scenarios).
+*   **Robust Normalization**: Handles scheme cleanup (e.g., fixing `gs:/` to `gs://`) and path sanitization.
 
-`banquet` provides standardized URL parsing for tabular data resources, encapsulating common query patterns like filtering, selecting, sorting, and pagination directly within the URL structure. It supports both path-based and query-parameter-based directives.
+## Area of Responsibility
 
-### Capabilities
+Banquet's sole responsibility is **parsing and interpretation**. It defines the "grammar" of the data ecosystem. It takes a raw string (the URL) and produces a structured, semantic representation of the user's intent (the Query). It acts as the bridge between a user-facing string and the backend execution engine.
 
-#### Parsing
-- **`ParseBanquet(rawurl string)`**: The core factory function that parses a raw URL string into a `Banquet` struct.
-- **`ParseNested(rawurl string)`**: Handles nested URLs (e.g., specific protocols like `gs://` embedded within an HTTP request path).
-- **`ParseNestedBanquet(r *http.Request)`**: Convenience wrapper for parsing URLs directly from an `http.Request`.
+## Scope (What it explicitly doesn't do)
 
-#### URL Standardization
-- **Scheme Normalization**: Automatically corrects malformed schemes like `gs:/` to `gs://`.
-- **Path Cleaning**: Trims leading slashes from nested paths.
+*   **No Execution**: Banquet does not fetch data, open files, or execute SQL queries. It only describes *what* should be fetched.
+*   **No Storage**: It has no concept of where data lives or how it is stored, beyond path string manipulation.
+*   **No Authentication**: It does not handle user identity or permissions.
 
-#### Field Extraction
-`Banquet` extracts the following standard fields from URLs:
+## Banquet Notation
 
-*   **`Table`**: Heuristically identified from the path (e.g., file name like `data.csv` or specific path segments).
-*   **`Select`**: Columns specified in the path (e.g., `/data.csv/col1,col2`) or via generic file extension detection.
-*   **`Where`**: Extracted from the `where` query parameter.
-*   **`Sort`**: Identified by `^` (Ascending) or `!^` (Descending) prefixes in the path (e.g., `/^col1`) or `sort` query parameter.
-*   **`Limit`**: Extracted from the `limit` query parameter.
-*   **`Offset`**: Extracted from the `offset` query parameter.
-*   **`GroupBy`**: Extracted from the `groupby` query parameter or `(expression)` in the path.
-*   **`Having`**: Extracted from the `having` query parameter.
-*   **`OrderBy`**: Extracted from the `orderby` query parameter.
+Banquet supports a flexible syntax that ranges from explicit to inferred, designed to be both machine-precise and human-readable.
 
-### Limitations
+### 1. Explicit Banquet Notation
+For unambiguous parsing, Banquet uses semicolon (`;`) delimiters to strictly separate the setup components.
+*   **Format**: `path/to/dataset;Table;Column`
+*   **Example**: `data/sales.sqlite;orders;amount`
+*   This explicitly tells the parser: "Dataset is `data/sales.sqlite`, Table is `orders`, Component is `amount`".
 
-*   **Heuristic Table Parsing**: The `parseTable` logic relies on simplified heuristics (like file extensions `.csv`, `.sqlite`, `.db`) or path position. It currently defaults to "sqlite_master" or "tb0" in specific scenarios and may require robustification for complex schemas.
-*   **Slice Notation**: While planned (e.g., `[2:30]`), slice notation parsing from the path is **not yet implemented**.
-*   **Select Parsing**: Relies on `path.Ext` to detect where the "file" part ends and column selection begins. Paths without clear file extensions might be ambiguous.
-*   **Error Handling**: Some internal parsers (like `parseWhere`) return empty strings on failure rather than specific errors.
+### 2. Familiar Syntax
+For ease of use, Banquet supports a standard slash-delimited syntax that mimics file system paths or standard REST URLs.
+*   **Format**: `path/to/dataset/table/column`
+*   **Example**: `data/sales.csv/amount`
+*   Banquet uses heuristics (checking for file extensions like `.csv`, `.sqlite`, `.db`) to guess where the dataset path ends and the query begins.
+
+### 3. Inferred Defaults
+Banquet strives to "do what you mean":
+*   **Select All**: If the URL points to a table but specifies no columns (or effectively selects the table name itself), Banquet infers `SELECT *`.
+*   **Table Guessing**: In simple one-table formats (like CSV), functionality allows omitting the table name, treating the file as the table.
+
+### 4. Syntax Sugar for Slice Notation
+Banquet supports Python-like slice notation in the path to handle pagination (`LIMIT` and `OFFSET`).
+*   **Syntax**: `[start:end]`
+*   **Behavior**:
+    *   `start` becomes `OFFSET`.
+    *   `end - start` becomes `LIMIT`.
+*   **Example**: `/data/users[10:20]`
+    *   Parses to: `OFFSET 10`, `LIMIT 10`.
+
+### 5. Sort
+Sort order can be defined directly in the path using prefix modifiers on column names.
+*   **Ascending**: `+` prefix. Example: `/data/users/+lastname` (Sort by lastname ASC).
+*   **Descending**: `-` prefix. Example: `/data/users/-age` (Sort by age DESC).
+*   *Note: This can also be handled via the `orderby` query parameter.*
+
+### 6. Equality & Filtering
+Simple equality checks can be embedded directly in the path segments alongside columns.
+*   **Syntax**: `Column!=Value`
+*   **Example**: `/data/users/status!=active`
+*   **Behavior**: This is parsed into the `WHERE` clause.
+*   Complex filters are supported via the standard `where` query parameter (e.g., `?where=age>21`).
