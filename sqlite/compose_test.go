@@ -11,10 +11,6 @@ func TestConstructSQL(t *testing.T) {
 		url      string
 		expected string
 	}{
-	tests := []struct {
-		url      string
-		expected string
-	}{
 		// --- 1. Basic Table Inference ---
 		{
 			// CSV path with implicit table (no table tier)
@@ -141,8 +137,9 @@ func TestConstructSQL(t *testing.T) {
 			expected: "SELECT \"id\", \"email\" FROM \"users\" ORDER BY \"joined\" ASC LIMIT 10 OFFSET 10",
 		},
 		{
-			// URL decoding in filters
-			url:      "data.sqlite;users;name!='O''Reilly'",
+			// URL decoding in filters: "name!=O%27Reilly" decodes to "name!=O'Reilly"
+			// Then quoted to 'O''Reilly'
+			url:      "data.sqlite;users;name!=O%27Reilly",
 			expected: "SELECT * FROM \"users\" WHERE name != 'O''Reilly'",
 		},
 

@@ -87,9 +87,8 @@ func InferTable(bq *banquet.Banquet) string {
 		return bq.Table
 	}
 
-	// If no columns are specified (and no table), we assume we want to list tables
-	// IF the source is a SQLite database.
-	if bq.ColumnPath == "" {
+	lower := strings.ToLower(bq.DataSetPath)
+	if strings.HasSuffix(lower, ".sqlite") || strings.HasSuffix(lower, ".db") {
 		return "sqlite_master"
 	}
 

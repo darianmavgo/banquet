@@ -78,6 +78,21 @@ func CleanUrl(rawurl string) string {
 		if !strings.HasPrefix(rawurl[idx:], "://") {
 			rawurl = strings.Replace(rawurl, ":/", "://", 1)
 		}
+	} else {
+		// If NO scheme separator :// is present, checks for colons in what would be the first path segment.
+		// Go's url.Parse will error if the first segment contains a colon (e.g. chars:chars) thinking it's a scheme.
+		// We encounter this with slice notation in filenames or windows paths if not careful.
+		// Fix: If no scheme, valid path chars shouldn't be interpreted as scheme.
+		// Prepend ./ makes it a clear relative path
+		if !strings.Contains(rawurl, "://") && strings.Contains(rawurl, ":") {
+			// Check if slash appears before colon
+			slashIdx := strings.Index(rawurl, "/")
+			colonIdx := strings.Index(rawurl, ":")
+			if colonIdx < slashIdx || slashIdx == -1 {
+				// Colon appears before any slash. This triggers "first path segment..." error
+				return "./" + rawurl
+			}
+		}
 	}
 
 	return rawurl
@@ -122,6 +137,11 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 		}
 	}
 
+	// cleanup table from any slice notation that might have adhered to it
+	if idx := strings.Index(b.Table, "["); idx != -1 {
+		b.Table = b.Table[:idx]
+	}
+
 	// Populate fields using private parsers
 	b.Select = ParseSelect(b.ColumnPath)
 	if verbose {
@@ -153,6 +173,7 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 
 	b.GroupBy = ParseGroupBy(b.Path, b.RawQuery)
 
+	// Passing b.Path to parseLimit allows finding slice anywhere.
 	b.Limit = parseLimit(b.RawQuery, b.Path)
 	b.Offset = parseOffset(b.RawQuery, b.Path)
 	b.Having = parseHaving(b.RawQuery)
@@ -297,15 +318,29 @@ func ParseSelect(columnPath string) []string {
 
 	var collected []string
 	for _, segment := range segments {
-		// Ignore slice notation
-		if strings.HasPrefix(segment, "[") && strings.HasSuffix(segment, "]") && strings.Contains(segment, ":") {
-			continue
-		}
+		// Do not clean the entire segment before splitting, as it might remove columns following slice notation.
+		// e.g., "id[0:10],name" -> cleanSegment="id" -> split -> ["id"] -> name is lost.
+		// Instead, split first, then clean.
+
 		if segment == "" {
 			continue
 		}
+
 		cols := strings.Split(segment, ",")
 		for _, col := range cols {
+			// Clean up slice notation from the column only if it looks like a slice
+			if idx := strings.Index(col, "["); idx != -1 {
+				if strings.Contains(col[idx:], ":") {
+					col = col[:idx]
+				}
+			}
+
+			// Basic cleanup
+			col = strings.TrimSpace(col)
+			if col == "" {
+				continue
+			}
+
 			// Ignore conditions
 			if strings.Contains(col, "!=") {
 				continue
@@ -317,16 +352,7 @@ func ParseSelect(columnPath string) []string {
 				continue
 			}
 
-			// Clean up slice notation
-			if idx := strings.Index(col, "["); idx != -1 {
-				col = col[:idx]
-			}
-
-			// Basic cleanup
-			col = strings.TrimSpace(col)
-			if col != "" {
-				collected = append(collected, col)
-			}
+			collected = append(collected, col)
 		}
 	}
 
@@ -512,14 +538,19 @@ func parseOrderBy(columnPath string, query string) (string, string) {
 }
 
 func parseSlice(pathStr string) (string, string) {
-	if !strings.HasSuffix(pathStr, "]") {
+	// Relaxed to find slice notation anywhere in the string
+	startIdx := strings.LastIndex(pathStr, "[")
+	if startIdx == -1 {
 		return "", ""
 	}
-	idx := strings.LastIndex(pathStr, "[")
-	if idx == -1 {
+	endIdx := strings.Index(pathStr[startIdx:], "]")
+	if endIdx == -1 {
 		return "", ""
 	}
-	content := pathStr[idx+1 : len(pathStr)-1]
+	// absolute end index
+	endIdx += startIdx
+
+	content := pathStr[startIdx+1 : endIdx]
 	parts := strings.Split(content, ":")
 	if len(parts) != 2 {
 		return "", ""
