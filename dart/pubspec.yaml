@@ -1,7 +1,7 @@
 name: banquet
 description: A Dart port of the banquet Go library. Parses structured URL paths into SQL-like query clauses for tabular data access.
 version: 0.1.0
-homepage: https://github.com/flight-buddies/banquet
+homepage: https://github.com/banquet
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
