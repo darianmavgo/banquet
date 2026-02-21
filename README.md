@@ -62,3 +62,24 @@ Simple equality checks can be embedded directly in the path segments alongside c
 *   **Example**: `/data/users/status!=active`
 *   **Behavior**: This is parsed into the `WHERE` clause.
 *   Complex filters are supported via the standard `where` query parameter (e.g., `?where=age>21`).
+
+## Flutter Go Bridge Integration (Manual CGO)
+
+We use a manual CGO approach to expose Banquet's parsing logic to Flutter via `dart:ffi`.
+
+### 1. Bridge Implementation
+- **Go Side**: `cmd/libbanquet/main.go` exports a C-compatible function `BanquetParse`.
+  - It takes a C string (URL).
+  - It returns a JSON string (BanquetDTO or error).
+  - It manages memory with `FreeString`.
+
+### 2. Building Shared Library
+To build the shared library for macOS:
+```bash
+go build -buildmode=c-shared -o ../sqliter/macos/Frameworks/libbanquet.dylib ./cmd/libbanquet/main.go
+```
+
+### 3. Dart/Flutter Integration
+- **Dart Side**: `sqliter/lib/bridge/banquet_bridge.dart` uses `dart:ffi` to load `libbanquet.dylib`.
+- **API**: `BanquetBridge.parse(String url)` returns a `Future<Map<String, dynamic>>`.
+
