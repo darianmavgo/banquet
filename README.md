@@ -63,6 +63,9 @@ Simple equality checks can be embedded directly in the path segments alongside c
 *   **Behavior**: This is parsed into the `WHERE` clause.
 *   Complex filters are supported via the standard `where` query parameter (e.g., `?where=age>21`).
 
+### 7. Folders and Datastores
+When a folder or datastore is requested that doesn't point directly to a single database (e.g., a folder like `/home/Documents/`), the expected behavior is to list all SQLite files in that folder and its subfolders.
+
 ## Flutter Go Bridge Integration (Manual CGO)
 
 We use a manual CGO approach to expose Banquet's parsing logic to Flutter via `dart:ffi`.
