@@ -261,6 +261,48 @@ func TestParseSelect(t *testing.T) {
 	}
 }
 
+func TestParseCollection(t *testing.T) {
+	cases := []struct {
+		url          string
+		isCollection bool
+		dataSetPath  string
+		table        string
+		orderBy      string
+		sortDir      string
+	}{
+		{"/", true, "", "", "", ""},
+		{"/d1", true, "d1", "", "", ""},
+		{"/local/Documents/Income", true, "local/Documents/Income", "", "", ""},
+		{"/local/Documents/Income/", true, "local/Documents/Income/", "", "", ""},
+		{"/local/Documents/Income/databases/-size_bytes", true, "local/Documents/Income", "databases", "size_bytes", "DESC"},
+		{"/local/Documents/Income/tables/+database", true, "local/Documents/Income", "tables", "database", "ASC"},
+		// A recognized dataset extension anywhere in the path is NOT a collection.
+		{"/my-bucket/reports.db/orders", false, "my-bucket/reports.db", "orders", "", ""},
+		{"data/sales.sqlite;orders;amount", false, "data/sales.sqlite", "orders", "", ""},
+	}
+	for _, c := range cases {
+		b, err := ParseBanquet(c.url)
+		if err != nil {
+			t.Fatalf("%s: ParseBanquet failed: %v", c.url, err)
+		}
+		if b.IsCollection != c.isCollection {
+			t.Errorf("%s: IsCollection = %v, want %v", c.url, b.IsCollection, c.isCollection)
+		}
+		if b.DataSetPath != c.dataSetPath {
+			t.Errorf("%s: DataSetPath = %q, want %q", c.url, b.DataSetPath, c.dataSetPath)
+		}
+		if b.Table != c.table {
+			t.Errorf("%s: Table = %q, want %q", c.url, b.Table, c.table)
+		}
+		if b.OrderBy != c.orderBy {
+			t.Errorf("%s: OrderBy = %q, want %q", c.url, b.OrderBy, c.orderBy)
+		}
+		if b.SortDirection != c.sortDir {
+			t.Errorf("%s: SortDirection = %q, want %q", c.url, b.SortDirection, c.sortDir)
+		}
+	}
+}
+
 func TestParseGroupBy(t *testing.T) {
 	TestLog(t)
 	afterPart := "some_column(group_column)"

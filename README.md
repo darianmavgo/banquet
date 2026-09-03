@@ -63,8 +63,22 @@ Simple equality checks can be embedded directly in the path segments alongside c
 *   **Behavior**: This is parsed into the `WHERE` clause.
 *   Complex filters are supported via the standard `where` query parameter (e.g., `?where=age>21`).
 
-### 7. Folders and Datastores
-When a folder or datastore is requested that doesn't point directly to a single database (e.g., a folder like `/home/Documents/`), the expected behavior is to list all SQLite files in that folder and its subfolders.
+### 7. Folders and Datastores (Collections)
+A path whose dataset portion carries **no recognized file extension** names a *container* rather than a single dataset. `ParseBanquet` sets `IsCollection` on the result and leaves the container path in `DataSetPath`; the host responds with a synthetic **catalog** of the datasets reachable under the container — recursively, so a folder lists the databases in it and its subfolders.
+
+The container path runs up to the first **reserved catalog table** (`databases`, `tables`) or clause-like segment; everything after is the ordinary table + sort + slice + filter grammar, applied to the catalog. `/` is the root container — every reachable dataset.
+
+*   **Example**: `/home/Documents` → catalog of every database under `Documents/`.
+*   **Example**: `/home/Documents/databases/-size_bytes` → that catalog, sorted by size descending.
+
+Full specification: [`docs/collections.md`](docs/collections.md).
+
+## Standards & Conventions
+
+Beyond URL parsing, the [`docs/`](docs/) directory collects the conventions that
+keep a Banquet data browser consistent — the collection catalog shape (normative,
+implemented by the parser) and the "trim" column-selection and rendering styles
+(recommended host/renderer guidance). See [`docs/README.md`](docs/README.md).
 
 ## Flutter Go Bridge Integration (Manual CGO)
 

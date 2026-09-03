@@ -13,6 +13,13 @@
 /// If no semicolons are present, the package heuristically determines the table
 /// or column based on file extensions.
 ///
+/// Collections (semicolon-less, no recognized dataset extension):
+/// A path with no recognized dataset extension names a container, not a single
+/// dataset. [parseBanquet] sets [Banquet.isCollection] and leaves the container
+/// path in [Banquet.dataSetPath]; the segments after the first reserved catalog
+/// table ("databases", "tables") or clause-like segment are parsed as an
+/// ordinary query over the catalog. See docs/collections.md.
+///
 /// Supported Prefixes/Suffixes:
 /// - Sort: +column (ASC), -column (DESC)
 /// - Slice: [start:end] (translated to LIMIT/OFFSET)
@@ -52,8 +59,13 @@ class Banquet {
   String having = '';
   String orderBy = '';
 
-  /// Path to the source dataset file (e.g., .csv, .sqlite).
+  /// Path to the source dataset file (e.g., .csv, .sqlite), or the container
+  /// path when [isCollection] is true.
   String dataSetPath = '';
+
+  /// True when the path names a container (folder / datastore) rather than a
+  /// single dataset — see docs/collections.md.
+  bool isCollection = false;
 
   /// The remaining path segment after the dataset, containing columns, sort
   /// instructions, or conditions.
@@ -72,6 +84,7 @@ class Banquet {
 
   // Convenience passthrough getters to mirror Go's embedded *url.URL fields.
   String get scheme => uri.scheme;
+
   /// Returns the host exactly as Go's url.URL.Host does – including port when present.
   /// e.g. 'bucket.appspot.com:8080' not just 'bucket.appspot.com'.
   String get host => uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
@@ -79,15 +92,12 @@ class Banquet {
   String get rawQuery => uri.query;
   String port() => uri.hasPort ? '${uri.port}' : '';
 
-
   /// Returns the userinfo username (mirrors Go's b.User.Username()).
-  String username() => uri.userInfo.contains(':')
-      ? uri.userInfo.split(':').first
-      : uri.userInfo;
+  String username() =>
+      uri.userInfo.contains(':') ? uri.userInfo.split(':').first : uri.userInfo;
 
   @override
-  String toString() =>
-      'rawurl: $_rawurl\n'
+  String toString() => 'rawurl: $_rawurl\n'
       '  S: $scheme H: $host DP: $dataSetPath CP: $columnPath RQ: $rawQuery TB: "$table"';
 }
 
@@ -146,9 +156,11 @@ Banquet parseBanquet(String rawurl) {
   b.dataSetPath = dsPath;
   b.table = tbl;
   b.columnPath = colPath;
+  b.isCollection = _pathNamesContainer(u.path);
 
   if (_verbose) {
-    print('[BANQUET] DataSetPath: ${b.dataSetPath}, Table: "${b.table}", ColumnPath: ${b.columnPath}');
+    print(
+        '[BANQUET] DataSetPath: ${b.dataSetPath}, Table: "${b.table}", ColumnPath: ${b.columnPath}, IsCollection: ${b.isCollection}');
   }
 
   // Fallback heuristic table identification
@@ -175,8 +187,7 @@ Banquet parseBanquet(String rawurl) {
   final pathWhere = _parsePathConditions(b.columnPath);
 
   if (pathWhere.isNotEmpty) {
-    b.where =
-        queryWhere.isNotEmpty ? '$queryWhere AND $pathWhere' : pathWhere;
+    b.where = queryWhere.isNotEmpty ? '$queryWhere AND $pathWhere' : pathWhere;
   } else {
     b.where = queryWhere;
   }
@@ -305,14 +316,60 @@ void fmtPrintln(Banquet b) {
       '  Table:      "${b.table}"');
 }
 
-String fmtSprintf(Banquet b) =>
-    'rawurl: ${b._rawurl}\\n'
+String fmtSprintf(Banquet b) => 'rawurl: ${b._rawurl}\\n'
     '  S: ${b.scheme} H: ${b.host} DP: ${b.dataSetPath}'
     'CP: ${b.columnPath}RQ:${b.rawQuery}TB:"${b.table}"';
 
 // ---------------------------------------------------------------------------
 // Private helpers (mirrors unexported Go functions)
 // ---------------------------------------------------------------------------
+
+/// The file suffixes that mark the end of the dataset portion of a path. A path
+/// with no segment carrying one of these names a container (docs/collections.md).
+const List<String> _datasetExtensions = [
+  '.zip',
+  '.csv',
+  '.sqlite',
+  '.db',
+  '.xlsx',
+  '.json',
+  '.txt',
+  '.html',
+];
+
+/// Mirrors [banquet.hasDatasetExtension].
+bool _hasDatasetExtension(String seg) {
+  for (final ext in _datasetExtensions) {
+    if (seg.endsWith(ext)) {
+      // Historical carve-out: "test.html" is a fixture, not a dataset.
+      if (ext == '.html' && seg == 'test.html') return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The synthetic tables a collection catalog exposes. One of these (or a
+/// clause-like segment) bounds the container path.
+const Set<String> _reservedCatalogTables = {'databases', 'tables'};
+
+/// Mirrors [banquet.isClauseLike].
+bool _isClauseLike(String seg) =>
+    seg.contains(',') ||
+    seg.startsWith(kAsc) ||
+    seg.startsWith(kDesc) ||
+    seg.contains('!=') ||
+    (seg.startsWith('[') && seg.contains(':'));
+
+/// Mirrors [banquet.pathNamesContainer]. True when rawpath names a container
+/// (a collection request) rather than a single dataset.
+bool _pathNamesContainer(String rawpath) {
+  if (rawpath.contains(';')) return false;
+  for (final part in rawpath.split('/')) {
+    if (_hasDatasetExtension(part)) return false;
+  }
+  return true;
+}
 
 /// Mirrors [banquet.parseDataSetColumnPath].
 (String datasetPath, String table, String columnPath) _parseDataSetColumnPath(
@@ -325,20 +382,27 @@ String fmtSprintf(Banquet b) =>
     return (datasetPath, table, columnPath);
   }
 
-  // Extension-based splitting (no semicolons)
   final parts = rawpath.split('/');
-  const knownExts = ['.zip', '.csv', '.sqlite', '.db', '.xlsx', '.json', '.txt'];
 
+  // Implicit tier: the dataset ends at the first segment with a known extension.
   for (var i = 0; i < parts.length; i++) {
-    final part = parts[i];
-    final isHtml =
-        part.endsWith('.html') && part != 'test.html';
-    final hasExt = knownExts.any((e) => part.endsWith(e)) || isHtml;
-    if (hasExt) {
+    if (_hasDatasetExtension(parts[i])) {
       final datasetPath = parts.sublist(0, i + 1).join('/');
       final columnPath =
           i + 1 < parts.length ? parts.sublist(i + 1).join('/') : '';
       return (datasetPath, '', columnPath);
+    }
+  }
+
+  // No extension anywhere: a collection request. "." / "./" / "" is the root
+  // container; otherwise the container runs up to the first reserved catalog
+  // table or clause-like segment, and the rest is the catalog query.
+  if (rawpath == '.' || rawpath == './' || rawpath.isEmpty) {
+    return ('', '', '');
+  }
+  for (var i = 0; i < parts.length; i++) {
+    if (_reservedCatalogTables.contains(parts[i]) || _isClauseLike(parts[i])) {
+      return (parts.sublist(0, i).join('/'), '', parts.sublist(i).join('/'));
     }
   }
   return (rawpath, '', '');
@@ -351,12 +415,7 @@ List<String> _getSegments(String columnPath) {
 
   var firstClear = -1;
   for (var i = 0; i < parts.length; i++) {
-    final part = parts[i];
-    if (part.contains(',') ||
-        part.startsWith(kAsc) ||
-        part.startsWith(kDesc) ||
-        part.contains('!=') ||
-        (part.startsWith('[') && part.contains(':'))) {
+    if (_isClauseLike(parts[i])) {
       firstClear = i;
       break;
     }
@@ -422,9 +481,7 @@ String _parseWhere(String query) {
 String _parseTable(String columnPath) {
   if (columnPath.isEmpty) return '';
 
-  final parts = columnPath
-      .replaceAll(RegExp(r'^/+|/+$'), '')
-      .split('/');
+  final parts = columnPath.replaceAll(RegExp(r'^/+|/+$'), '').split('/');
   if (parts.isEmpty || parts[0].isEmpty) return '';
 
   final first = parts[0];
