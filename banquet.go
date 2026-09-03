@@ -11,6 +11,13 @@
 // Fallback Convention (semicolon-less):
 // If no semicolons are present, the package attempts to heuristically determine the table or column based on file usage.
 //
+// Collections (semicolon-less, no recognized dataset extension):
+// A path with no recognized dataset extension names a container, not a single
+// dataset. ParseBanquet sets IsCollection and leaves the container path in
+// DataSetPath; the segments after the first reserved catalog table
+// ("databases", "tables") or clause-like segment are parsed as an ordinary
+// query over the catalog. See docs/collections.md.
+//
 // Supported Prefixes/Suffixes:
 // - Sort: +column (ASC), -column (DESC)
 // - Slice: [start:end] (translated to LIMIT/OFFSET)
@@ -49,7 +56,8 @@ type Banquet struct {
 	GroupBy       string
 	Having        string
 	OrderBy       string
-	DataSetPath   string // Path to the source dataset file (e.g., .csv, .sqlite).
+	DataSetPath   string // Path to the source dataset file (e.g., .csv, .sqlite), or the container path when IsCollection is true.
+	IsCollection  bool   // true when the path names a container (folder / datastore) rather than a single dataset — see docs/collections.md.
 
 	ColumnPath string // The remaining path segment containing columns, sort intructions, or conditions.
 	// fields below are for internal use
@@ -125,8 +133,9 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 	}
 
 	b.DataSetPath, b.Table, b.ColumnPath = parseDataSetColumnPath(b.Path)
+	b.IsCollection = pathNamesContainer(b.Path)
 	if verbose {
-		log.Printf("[BANQUET] DataSetPath: %s, Table: %q, ColumnPath: %s", b.DataSetPath, b.Table, b.ColumnPath)
+		log.Printf("[BANQUET] DataSetPath: %s, Table: %q, ColumnPath: %s, IsCollection: %t", b.DataSetPath, b.Table, b.ColumnPath, b.IsCollection)
 	}
 
 	// Table parsing logic - fallback to heuristic only if not explicitly set via semicolon
@@ -244,8 +253,61 @@ func ParseNested(rawURL string) (*Banquet, error) {
 	return b, nil
 }
 
+// datasetExtensions are the file suffixes that mark the end of the dataset
+// portion of a path. A path with no segment carrying one of these names a
+// container (see docs/collections.md).
+var datasetExtensions = []string{
+	".zip", ".csv", ".sqlite", ".db", ".xlsx", ".json", ".txt", ".html",
+}
+
+// hasDatasetExtension reports whether seg ends the dataset portion of a path.
+func hasDatasetExtension(seg string) bool {
+	for _, ext := range datasetExtensions {
+		if strings.HasSuffix(seg, ext) {
+			// Historical carve-out: "test.html" is a fixture, not a dataset.
+			if ext == ".html" && seg == "test.html" {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// reservedCatalogTables are the synthetic tables a collection catalog exposes.
+// One of these (or a clause-like segment) marks the boundary between the
+// container path and the query applied to the catalog.
+var reservedCatalogTables = map[string]bool{"databases": true, "tables": true}
+
+// isClauseLike reports whether a path segment is a Banquet clause (column list,
+// sort prefix, inequality, or slice) rather than a container or table name.
+func isClauseLike(seg string) bool {
+	return strings.Contains(seg, ",") ||
+		strings.HasPrefix(seg, ASC) ||
+		strings.HasPrefix(seg, DESC) ||
+		strings.Contains(seg, "!=") ||
+		(strings.HasPrefix(seg, "[") && strings.Contains(seg, ":"))
+}
+
+// pathNamesContainer reports whether rawpath names a container (a collection
+// request) rather than a single dataset: no explicit ";" tiers and no segment
+// carrying a recognized dataset extension.
+func pathNamesContainer(rawpath string) bool {
+	if strings.Contains(rawpath, ";") {
+		return false
+	}
+	for _, part := range strings.Split(rawpath, "/") {
+		if hasDatasetExtension(part) {
+			return false
+		}
+	}
+	return true
+}
+
 // parseDataSetColumnPath splits the raw path into dataset, table, and column segments.
-// It supports explicit tiers separated by semicolons (dataset;table;column) or implicit tiers based on file extensions.
+// It supports explicit tiers separated by semicolons (dataset;table;column), implicit
+// tiers based on file extensions, and collection requests (docs/collections.md) when
+// no segment carries a recognized dataset extension.
 func parseDataSetColumnPath(rawpath string) (datasetPath string, table string, columnPath string) {
 	// If rawpath contains semicolons, we use explicit tier parsing: dataset;table;columns
 	if strings.Contains(rawpath, ";") {
@@ -260,23 +322,28 @@ func parseDataSetColumnPath(rawpath string) (datasetPath string, table string, c
 		return
 	}
 
-	// if there is no ";" then use existing file extension logic to split path into dataset path and column path
 	parts := strings.Split(rawpath, "/")
-	for i, part := range parts {
-		if strings.HasSuffix(part, ".zip") ||
-			strings.HasSuffix(part, ".csv") ||
-			strings.HasSuffix(part, ".sqlite") ||
-			strings.HasSuffix(part, ".db") ||
-			strings.HasSuffix(part, ".xlsx") ||
-			strings.HasSuffix(part, ".json") ||
-			(strings.HasSuffix(part, ".html") && part != "test.html") ||
-			strings.HasSuffix(part, ".txt") {
 
+	// Implicit tier: the dataset ends at the first segment with a known extension.
+	for i, part := range parts {
+		if hasDatasetExtension(part) {
 			datasetPath = strings.Join(parts[:i+1], "/")
 			if i+1 < len(parts) {
 				columnPath = strings.Join(parts[i+1:], "/")
 			}
 			return datasetPath, "", columnPath
+		}
+	}
+
+	// No extension anywhere: a collection request. "." / "./" / "" is the root
+	// container; otherwise the container runs up to the first reserved catalog
+	// table or clause-like segment, and the rest is the catalog query.
+	if rawpath == "." || rawpath == "./" || rawpath == "" {
+		return "", "", ""
+	}
+	for i, part := range parts {
+		if reservedCatalogTables[part] || isClauseLike(part) {
+			return strings.Join(parts[:i], "/"), "", strings.Join(parts[i:], "/")
 		}
 	}
 	return rawpath, "", ""
@@ -292,11 +359,7 @@ func getSegments(columnPath string) []string {
 	// Find the first segment that contains clear column/sort/condition indicators
 	firstClearSegment := -1
 	for i, part := range parts {
-		if strings.Contains(part, ",") ||
-			strings.HasPrefix(part, ASC) ||
-			strings.HasPrefix(part, DESC) ||
-			strings.Contains(part, "!=") ||
-			(strings.HasPrefix(part, "[") && strings.Contains(part, ":")) {
+		if isClauseLike(part) {
 			firstClearSegment = i
 			break
 		}

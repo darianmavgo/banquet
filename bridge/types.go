@@ -13,6 +13,7 @@ type BanquetDTO struct {
 	Having        string
 	OrderBy       string
 	DataSetPath   string
+	IsCollection  bool
 	ColumnPath    string
 	OriginalURL   string
 }

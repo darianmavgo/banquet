@@ -4,6 +4,12 @@ http://example.com/data.csv/col1,
 http://localhost...,
 http://localhost:8080/
 http://localhost:8080/20mb-examplefile-com.txt
+http://localhost:8080/d1
+http://localhost:8080/local/Documents/Income
+http://localhost:8080/local/Documents/Income/
+http://localhost:8080/local/Documents/Income/-size_bytes
+http://localhost:8080/local/Documents/Income/databases/-size_bytes
+http://localhost:8080/local/Documents/Income/tables/+database
 http://localhost:8080/20mb.json
 http://localhost:8080/20mb.xlsx
 http://localhost:8080/20mb.xlsx/sheet1?limit=50

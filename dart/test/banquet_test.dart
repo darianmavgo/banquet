@@ -56,8 +56,7 @@ void main() {
     expect(b.username(), equals('matrix'), reason: 'Username');
     expect(b.host, equals('bucket.appspot.com:8080'), reason: 'Host');
     expect(b.port(), equals('8080'), reason: 'Port');
-    expect(b.path,
-        equals('/some/file/path.csv/column1,column2/+column3'),
+    expect(b.path, equals('/some/file/path.csv/column1,column2/+column3'),
         reason: 'Path');
     expect(b.rawQuery, equals('orderid=1'), reason: 'RawQuery');
   });
@@ -72,7 +71,8 @@ void main() {
 
     expect(b.scheme, equals('gs'), reason: 'Scheme');
     expect(b.host, equals('bucket.appspot.com:8080'), reason: 'Host');
-    expect(b.table, equals(''), reason: 'Table (heuristic path, should be empty)');
+    expect(b.table, equals(''),
+        reason: 'Table (heuristic path, should be empty)');
     expect(b.select, equals(['column1', 'column2']), reason: 'Select');
     expect(b.orderBy, equals('column3'), reason: 'OrderBy');
     expect(b.where, equals('age>20'), reason: 'Where');
@@ -93,8 +93,7 @@ void main() {
     expect(b.scheme, equals('gs'), reason: 'Scheme');
     expect(b.host, equals('bucket.appspot.com:8080'), reason: 'Host');
     expect(b.port(), equals('8080'), reason: 'Port');
-    expect(b.path,
-        equals('/some/file/path.csv/column1,column2,+column3'),
+    expect(b.path, equals('/some/file/path.csv/column1,column2,+column3'),
         reason: 'Path');
     expect(b.rawQuery, equals('orderid=1'), reason: 'RawQuery');
   });
@@ -107,6 +106,61 @@ void main() {
     // Sort prefixes exclude a column from the SELECT list
     final result = parseSelect(afterTable);
     expect(result, equals(['column1']));
+  });
+
+  // ---------------------------------------------------------------------------
+  // TestParseCollection (docs/collections.md)
+  // ---------------------------------------------------------------------------
+  test('TestParseCollection', () {
+    final cases = [
+      ('/', true, '', '', '', ''),
+      ('/d1', true, 'd1', '', '', ''),
+      ('/local/Documents/Income', true, 'local/Documents/Income', '', '', ''),
+      ('/local/Documents/Income/', true, 'local/Documents/Income/', '', '', ''),
+      (
+        '/local/Documents/Income/databases/-size_bytes',
+        true,
+        'local/Documents/Income',
+        'databases',
+        'size_bytes',
+        'DESC'
+      ),
+      (
+        '/local/Documents/Income/tables/+database',
+        true,
+        'local/Documents/Income',
+        'tables',
+        'database',
+        'ASC'
+      ),
+      // A recognized dataset extension anywhere in the path is NOT a collection.
+      (
+        '/my-bucket/reports.db/orders',
+        false,
+        'my-bucket/reports.db',
+        'orders',
+        '',
+        ''
+      ),
+      (
+        'data/sales.sqlite;orders;amount',
+        false,
+        'data/sales.sqlite',
+        'orders',
+        '',
+        ''
+      ),
+    ];
+
+    for (final (url, isCollection, dataSetPath, table, orderBy, sortDir)
+        in cases) {
+      final b = parseBanquet(url);
+      expect(b.isCollection, equals(isCollection), reason: '$url IsCollection');
+      expect(b.dataSetPath, equals(dataSetPath), reason: '$url DataSetPath');
+      expect(b.table, equals(table), reason: '$url Table');
+      expect(b.orderBy, equals(orderBy), reason: '$url OrderBy');
+      expect(b.sortDirection, equals(sortDir), reason: '$url SortDirection');
+    }
   });
 
   // ---------------------------------------------------------------------------

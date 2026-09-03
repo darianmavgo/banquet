@@ -22,6 +22,7 @@ func Parse(rawURL string) (*BanquetDTO, error) {
 		Having:        b.Having,
 		OrderBy:       b.OrderBy,
 		DataSetPath:   b.DataSetPath,
+		IsCollection:  b.IsCollection,
 		ColumnPath:    b.ColumnPath,
 		OriginalURL:   b.String(),
 	}, nil
