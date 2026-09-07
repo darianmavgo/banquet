@@ -1,15 +1,13 @@
-# Rendering Style
+# Banquet Grid Style
 
 **Status: recommended (renderer convention).** How a result is *drawn* once
-[Banquet Query Style](query-style.md) has chosen the columns.
+[Banquet Query Style](banquet-query-style.md) has chosen the columns.
 
 These are guidance for the grid renderer, independent of the parser. The
 parenthetical notes reflect the reference implementation (`sqlite.mavgo.com`).
 
-1. Truncate or soft-wrap free-form text longer than ~120 characters so the grid
-   stays scannable.
-2. Format values consistently: dates readable, numbers thousands-separated,
-   booleans as Yes / No.
+1. **Max Cell Size & Wrapping**: Truncate or soft-wrap free-form text longer than ~120 characters so the grid stays scannable. Do not wrap numeric values, IDs, or timestamps. Max cell height should typically not exceed 3-4 lines of text.
+2. **Value Translation (Original vs Translated)**: Format values consistently for readability by default (e.g., epoch timestamps translated to readable dates, booleans translated to Yes/No, or foreign keys translated to a display name if joined). The original raw value should remain accessible, either via a hover tooltip or by toggling a "raw" view. Numbers should be thousands-separated.
 3. When a grouping column is in play (Query Style rule 4), give the group-header
    cell light visual separation — a background tint and an accent left border.
    Blank each repeated dimension prefix so the parent value reads as a section

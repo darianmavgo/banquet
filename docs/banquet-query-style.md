@@ -3,7 +3,7 @@
 **Status: recommended (host / renderer convention).** Nicknamed **trim** in the
 UI — the default display kind. Banquet Query Style decides *which* columns a
 result shows and in *what order*. How the cells and rows are then drawn is a
-separate concern — see [rendering-style.md](rendering-style.md).
+separate concern — see [banquet-grid-style.md](banquet-grid-style.md).
 
 The reference implementation is `sqlite.mavgo.com`'s `sql-engine.js`
 (`orderColumns` / `visibleColumns` / `buildSummary` / `probeTable`). A one-time
