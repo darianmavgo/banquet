@@ -18,7 +18,7 @@ Icon?
 *.out
 main
 mksqlite
-
+sqliter
 # Common binary output names
 bin/
 dist/
