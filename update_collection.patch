@@ -1,0 +1,87 @@
+--- cmd/sqliter/collection.go
++++ cmd/sqliter/collection.go
+@@ -4,6 +4,7 @@
+ 	"fmt"
+ 	"os"
+ 	"path/filepath"
+ 	"sort"
+ 	"strings"
++	"database/sql"
+ 
+ 	"github.com/darianmavgo/banquet"
+@@ -11,6 +12,7 @@
+ 	"github.com/olekukonko/tablewriter"
++	_ "github.com/mattn/go-sqlite3"
+ )
+ 
+@@ -19,6 +21,10 @@
+ 	type DbEntry struct {
+ 		Name       string
+ 		Location   string
++		Key        string
++		TableCount int
++		Size       string
+ 		SizeBytes  int64
+ 		Modified   string
++		Status     string
+ 	}
+ 
+@@ -45,10 +51,32 @@
+ 		lower := strings.ToLower(info.Name())
+ 		if strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") {
+ 			rel, _ := filepath.Rel(basePath, path)
++
++			status := "ok"
++			tableCount := 0
++			db, openErr := sql.Open("sqlite3", path)
++			if openErr != nil {
++				status = "error"
++			} else {
++				err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table';").Scan(&tableCount)
++				if err != nil {
++					status = "error"
++				}
++				db.Close()
++			}
++			
++			sizeStr := fmt.Sprintf("%d B", info.Size())
++			if info.Size() > 1024*1024 {
++				sizeStr = fmt.Sprintf("%.1f MB", float64(info.Size())/(1024*1024))
++			} else if info.Size() > 1024 {
++				sizeStr = fmt.Sprintf("%.1f KB", float64(info.Size())/1024)
++			}
++
+ 			entries = append(entries, DbEntry{
+ 				Name:      info.Name(),
+ 				Location:  rel,
++				Key:       rel,
++				TableCount: tableCount,
++				Size:      sizeStr,
+ 				SizeBytes: info.Size(),
+ 				Modified:  info.ModTime().Format("2006-01-02 15:04:05"),
++				Status:    status,
+ 			})
+ 		}
+@@ -81,14 +109,18 @@
+ 	})
+ 
+ 	table := tablewriter.NewWriter(os.Stdout)
+-	table.SetHeader([]string{"name", "location", "size_bytes", "modified", "open"})
++	table.SetHeader([]string{"name", "location", "key", "table_count", "size", "size_bytes", "modified", "status", "open"})
+ 	table.SetBorder(false)
+ 	table.SetAlignment(tablewriter.ALIGN_LEFT)
+ 
+ 	for _, e := range entries {
+ 		openPath := filepath.Join(basePath, e.Location)
+ 		table.Append([]string{
+ 			e.Name,
+ 			e.Location,
++			e.Key,
++			fmt.Sprintf("%d", e.TableCount),
++			e.Size,
+ 			fmt.Sprintf("%d", e.SizeBytes),
+ 			e.Modified,
++			e.Status,
+ 			openPath,
+ 		})
+ 	}
