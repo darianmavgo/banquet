@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	orig ""
-	"github.com/csnewman/flutter-go-bridge/runtime"
 )
 
 /*
