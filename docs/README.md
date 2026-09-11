@@ -24,6 +24,7 @@ wants results to read the way Banquet users expect.
   what order ("trim" view).
 - **[banquet-grid-style.md](banquet-grid-style.md)** — how the chosen columns and rows
   are drawn.
+- **[banquet-bar-style.md](banquet-bar-style.md)** — how the interactive address/Banquet Bar behaves as the primary navigation input.
 - **[banquet-db-list-style.md](banquet-db-list-style.md)** — how a datastore or folder containing sqlite files is displayed.
 - **[banquet-table-list-style.md](banquet-table-list-style.md)** — how a list of tables within a database is displayed.
 

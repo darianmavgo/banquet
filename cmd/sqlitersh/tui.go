@@ -43,22 +43,31 @@ type model struct {
 
 func initialModel(startCtx string) model {
 	ti := textinput.New()
-	ti.Placeholder = "Enter a query, 'open', or 'help'"
+	ti.Placeholder = "Enter Banquet URL, table query, or command (open, help)"
 	ti.Focus()
-	ti.CharLimit = 256
-	ti.Width = 80
-	ti.PromptStyle = promptStyle
+	ti.CharLimit = 1024
+	ti.Width = 100
+	ti.Prompt = " Banquet: "
+	ti.PromptStyle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("230")).Bold(true)
+	if startCtx != "" {
+		ti.SetValue(startCtx)
+	}
 
 	fp := filepicker.New()
 	fp.AllowedTypes = []string{".sqlite", ".db"}
 	dir, _ := os.Getwd()
 	fp.CurrentDirectory = dir
 
+	vp := viewport.New(80, 20)
+
 	return model{
+		viewport:   vp,
 		textInput:  ti,
 		filepicker: fp,
 		state:      stateREPL,
 		context:    startCtx,
+		lastURL:    startCtx,
+		ready:      true,
 	}
 }
 
@@ -144,7 +153,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if line == "" {
 				return m, nil
 			}
-			m.textInput.SetValue("")
 
 			parts := strings.Fields(line)
 			cmd := strings.ToLower(parts[0])
@@ -164,6 +172,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "cd":
 				if len(parts) > 1 {
 					m.context = resolveContext(m.context, parts[1])
+					m.lastURL = m.context
+					m.textInput.SetValue(m.context)
 				} else {
 					m.err = fmt.Errorf("Usage: cd <path>")
 				}
@@ -172,6 +182,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				targetURL := resolveContext(m.context, line)
 				m.lastURL = targetURL
+				m.context = targetURL
+				m.textInput.SetValue(targetURL)
 				out, err := executeCommand(targetURL)
 				if err != nil {
 					m.err = err
@@ -182,6 +194,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.viewport.GotoTop()
 				}
 			}
+			m.textInput.Focus()
 			return m, nil
 
 		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
@@ -199,7 +212,9 @@ func (m model) View() string {
 	}
 
 	header := titleStyle.Render("Sqlitersh")
-	if m.lastURL != "" {
+	if m.state == stateREPL {
+		header += "\n" + m.textInput.View()
+	} else if m.lastURL != "" {
 		header += "\n" + banquetBarStyle.Render(m.lastURL)
 	}
 
@@ -210,19 +225,15 @@ func (m model) View() string {
 		mainContent = borderStyle.Render(m.viewport.View())
 	}
 
-	promptText := getPrompt(m.context) + "> "
-	m.textInput.Prompt = promptText
-
 	footer := ""
 	if m.state == stateREPL {
-		footer = m.textInput.View()
 		if m.err != nil {
-			footer += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("9")).MarginLeft(2).Render(m.err.Error())
+			footer = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).MarginLeft(2).Render(m.err.Error())
 		} else {
-			footer += "\n" + infoStyle.Render(fmt.Sprintf("Context: %s | ↑/↓: scroll | ctrl+c: quit", m.context))
+			footer = infoStyle.Render("Enter: evaluate URL/query | ↑/↓: scroll | ctrl+c: quit")
 		}
 	} else {
-		footer = "\n" + infoStyle.Render("Use arrows to select a file | ESC to cancel")
+		footer = infoStyle.Render("Use arrows to select a file | ESC to cancel")
 		if m.err != nil {
 			footer += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("9")).MarginLeft(2).Render(m.err.Error())
 		}

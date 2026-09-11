@@ -16,5 +16,5 @@ parenthetical notes reflect the reference implementation (`sqlite.mavgo.com`).
    blanking and the tint off. *(implemented in the reference host)*
 4. On zero rows, show a "No results found" message rather than a bare empty grid.
 
-The SQL behind whatever the grid is showing SHOULD be visible to the user — the
-reference host mirrors it into the toolbar, one line, click-to-copy.
+The SQL or active Banquet URL behind whatever the grid is showing SHOULD be visible to the user in the [Banquet Bar](banquet-bar-style.md).
+
