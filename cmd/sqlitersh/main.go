@@ -15,7 +15,7 @@ func main() {
 		startCtx = "file://."
 	}
 
-	p := tea.NewProgram(initialModel(startCtx), tea.WithAltScreen())
+	p := tea.NewProgram(initialModel(startCtx), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v\n", err)
 		os.Exit(1)

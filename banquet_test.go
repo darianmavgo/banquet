@@ -279,6 +279,9 @@ func TestParseCollection(t *testing.T) {
 		// A recognized dataset extension anywhere in the path is NOT a collection.
 		{"/my-bucket/reports.db/orders", false, "my-bucket/reports.db", "orders", "", ""},
 		{"data/sales.sqlite;orders;amount", false, "data/sales.sqlite", "orders", "", ""},
+		{"file://testdb.sqlite", false, "testdb.sqlite", "", "", ""},
+		{"file://tests/tests.db", false, "tests/tests.db", "", "", ""},
+		{"file://testdb.sqlite/steps", false, "testdb.sqlite", "steps", "", ""},
 	}
 	for _, c := range cases {
 		b, err := ParseBanquet(c.url)

@@ -132,6 +132,14 @@ func ParseBanquet(rawurl string) (*Banquet, error) {
 		rawurl: rawurl,
 	}
 
+	if b.Scheme == "file" && b.Host != "" && b.Host != "localhost" {
+		if b.Path == "" {
+			b.Path = b.Host
+		} else {
+			b.Path = b.Host + b.Path
+		}
+	}
+
 	b.DataSetPath, b.Table, b.ColumnPath = parseDataSetColumnPath(b.Path)
 	b.IsCollection = pathNamesContainer(b.Path)
 	if verbose {
