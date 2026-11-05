@@ -41,6 +41,22 @@ Simple equality checks can be embedded directly in the path segments alongside c
 *   **Behavior**: This is parsed into the `WHERE` clause.
 *   Complex filters are supported via the standard `where` query parameter (e.g., `?where=age>21`).
 
+#### The query string defaults to `WHERE`
+Everything after the `?` is a filter unless its key is reserved. A parameter whose key is **not** one of the reserved keys below is a `WHERE` condition, so the `where=` prefix is optional:
+
+| URL | Effective `WHERE` |
+|---|---|
+| `/data/users?age>21` | `age>21` |
+| `/data/users?status=active` | `status = 'active'` |
+| `/data/users?status!=active&age>21` | `status != 'active' AND age>21` |
+| `/data/users?where=age>21&status=active` | `age>21 AND status = 'active'` |
+
+*   **Reserved keys** (never conditions): `where`, `filter`, `limit`, `offset`, `sort`, `orderby`, `order`, `groupby`, `having`.
+*   **Combining**: conditions from `where=`, bare parameters, and path equality (`col!=value`, section 6) are joined with `AND`.
+*   **Value quoting**: `col=value` and `col!=value` are quoted like path equality (numbers stay bare, text is single-quoted). Any other form (`age>21`, `name LIKE 'A%'`) is passed through as written.
+*   **Needs an operator**: a parameter is a condition only if it contains a comparison (`=`, `!=`, `<`, `>`, `<=`, `>=`, or `LIKE` / `IN` / `IS` / `BETWEEN`). A bare token such as `?markov` is not a condition; it stays an opaque parameter (collection catalogs use it as a search term, section 7).
+*   **Implementations** that ignored unrecognized parameters before this rule were silently dropping the user's filter; a viewer should surface a condition it cannot apply rather than echo it back as if it had worked.
+
 ### 7. Folders and Datastores (Collections)
 A path whose dataset portion carries **no recognized file extension** names a *container* rather than a single dataset. `ParseBanquet` sets `IsCollection` on the result and leaves the container path in `DataSetPath`; the host responds with a synthetic **catalog** of the datasets reachable under the container — recursively, so a folder lists the databases in it and its subfolders.
 
