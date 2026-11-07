@@ -20,13 +20,13 @@ Guidance for the layer above the parser — the thing that actually opens datase
 and draws tables. Not implemented by the library; recommended for any host that
 wants results to read the way Banquet users expect.
 
-- **[banquet-query-style.md](banquet-query-style.md)** — which columns a result shows, and in
+- **[banquet-query-style.md](../standards/banquet-query-style.md)** — which columns a result shows, and in
   what order ("trim" view).
-- **[banquet-grid-style.md](banquet-grid-style.md)** — how the chosen columns and rows
+- **[banquet-grid-style.md](../standards/banquet-grid-style.md)** — how the chosen columns and rows
   are drawn.
-- **[banquet-bar-style.md](banquet-bar-style.md)** — how the interactive address/Banquet Bar behaves as the primary navigation input.
-- **[banquet-db-list-style.md](banquet-db-list-style.md)** — how a datastore or folder containing sqlite files is displayed.
-- **[banquet-table-list-style.md](banquet-table-list-style.md)** — how a list of tables within a database is displayed.
+- **[banquet-bar-style.md](../standards/banquet-bar-style.md)** — how the interactive address/Banquet Bar behaves as the primary navigation input.
+- **[banquet-db-list-style.md](../standards/banquet-db-list-style.md)** — how a datastore or folder containing sqlite files is displayed.
+- **[banquet-table-list-style.md](../standards/banquet-table-list-style.md)** — how a list of tables within a database is displayed.
 
 ## Reference implementation
 

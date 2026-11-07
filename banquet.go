@@ -16,7 +16,7 @@
 // dataset. ParseBanquet sets IsCollection and leaves the container path in
 // DataSetPath; the segments after the first reserved catalog table
 // ("databases", "tables") or clause-like segment are parsed as an ordinary
-// query over the catalog. See docs/collections.md.
+// query over the catalog. See standards/banquet-db-list-style.md.
 //
 // Supported Prefixes/Suffixes:
 // - Sort: +column (ASC), -column (DESC)
@@ -57,7 +57,7 @@ type Banquet struct {
 	Having        string
 	OrderBy       string
 	DataSetPath   string // Path to the source dataset file (e.g., .csv, .sqlite), or the container path when IsCollection is true.
-	IsCollection  bool   // true when the path names a container (folder / datastore) rather than a single dataset — see docs/collections.md.
+	IsCollection  bool   // true when the path names a container (folder / datastore) rather than a single dataset — see standards/banquet-db-list-style.md.
 
 	ColumnPath string // The remaining path segment containing columns, sort intructions, or conditions.
 	// fields below are for internal use
@@ -263,7 +263,7 @@ func ParseNested(rawURL string) (*Banquet, error) {
 
 // datasetExtensions are the file suffixes that mark the end of the dataset
 // portion of a path. A path with no segment carrying one of these names a
-// container (see docs/collections.md).
+// container (see standards/banquet-db-list-style.md).
 var datasetExtensions = []string{
 	".zip", ".csv", ".sqlite", ".db", ".xlsx", ".json", ".txt", ".html",
 }
@@ -314,7 +314,7 @@ func pathNamesContainer(rawpath string) bool {
 
 // parseDataSetColumnPath splits the raw path into dataset, table, and column segments.
 // It supports explicit tiers separated by semicolons (dataset;table;column), implicit
-// tiers based on file extensions, and collection requests (docs/collections.md) when
+// tiers based on file extensions, and collection requests (standards/banquet-db-list-style.md) when
 // no segment carries a recognized dataset extension.
 func parseDataSetColumnPath(rawpath string) (datasetPath string, table string, columnPath string) {
 	// If rawpath contains semicolons, we use explicit tier parsing: dataset;table;columns

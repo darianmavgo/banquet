@@ -18,7 +18,7 @@
 /// dataset. [parseBanquet] sets [Banquet.isCollection] and leaves the container
 /// path in [Banquet.dataSetPath]; the segments after the first reserved catalog
 /// table ("databases", "tables") or clause-like segment are parsed as an
-/// ordinary query over the catalog. See docs/collections.md.
+/// ordinary query over the catalog. See standards/banquet-db-list-style.md.
 ///
 /// Supported Prefixes/Suffixes:
 /// - Sort: +column (ASC), -column (DESC)
@@ -64,7 +64,7 @@ class Banquet {
   String dataSetPath = '';
 
   /// True when the path names a container (folder / datastore) rather than a
-  /// single dataset — see docs/collections.md.
+  /// single dataset — see standards/banquet-db-list-style.md.
   bool isCollection = false;
 
   /// The remaining path segment after the dataset, containing columns, sort
@@ -325,7 +325,7 @@ String fmtSprintf(Banquet b) => 'rawurl: ${b._rawurl}\\n'
 // ---------------------------------------------------------------------------
 
 /// The file suffixes that mark the end of the dataset portion of a path. A path
-/// with no segment carrying one of these names a container (docs/collections.md).
+/// with no segment carrying one of these names a container (standards/banquet-db-list-style.md).
 const List<String> _datasetExtensions = [
   '.zip',
   '.csv',

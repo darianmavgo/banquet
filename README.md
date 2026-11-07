@@ -24,11 +24,11 @@ Banquet's sole responsibility is **parsing and interpretation**. It defines the 
 
 Banquet's URL structure and client rendering behaviors are defined by a set of formal standards located in the [`docs/`](docs/) directory:
 
-*   **[Banquet URL Syntax](docs/banquet-url-syntax.md)**: The core grammar for encoding dataset paths, table names, queries, slices, sorting, and filtering into a single URL.
-*   **[Collections & Database List Style](docs/banquet-db-list-style.md)**: The standard for mapping folders into queryable catalogs, and UI conventions for displaying the resulting lists of databases.
-*   **[Table List Style](docs/banquet-table-list-style.md)**: Conventions for listing available tables within a dataset.
-*   **[Query Style](docs/banquet-query-style.md)**: Recommended conventions for displaying query inputs and execution parameters.
-*   **[Grid Style](docs/banquet-grid-style.md)**: Standards for rendering tabular data grids, including alignment and pagination.
+*   **[Banquet URL Syntax](standards/banquet-url-syntax.md)**: The core grammar for encoding dataset paths, table names, queries, slices, sorting, and filtering into a single URL.
+*   **[Collections & Database List Style](standards/banquet-db-list-style.md)**: The standard for mapping folders into queryable catalogs, and UI conventions for displaying the resulting lists of databases.
+*   **[Table List Style](standards/banquet-table-list-style.md)**: Conventions for listing available tables within a dataset.
+*   **[Query Style](standards/banquet-query-style.md)**: Recommended conventions for displaying query inputs and execution parameters.
+*   **[Grid Style](standards/banquet-grid-style.md)**: Standards for rendering tabular data grids, including alignment and pagination.
 
 ## Flutter Go Bridge Integration (Manual CGO)
 
