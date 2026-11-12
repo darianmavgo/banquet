@@ -30,7 +30,13 @@ Rules, most significant first:
 8. No column cap for normal tables. Past ~40 surviving columns `trim` keeps the
    first ~40 in priority order; `raw` is always the uncapped
    show-everything view.
+9. Don't display the `rowid` when the primary key already carries it. If a table's
+   pk is an `INTEGER PRIMARY KEY` it *is* the rowid (an alias), so a separate
+   `rowid` column — or any row-number column, see rule 3 — is a duplicate of it
+   and is dropped. A table with no such pk (a rowid table with a composite or
+   non-integer pk, or no pk) keeps the `rowid` as its identity column, since
+   nothing else uniquely names the row. `raw` is unaffected and shows it.
 
 A `_style` / `_head` row keyed `"<table>.columns"` (or bare `"columns"` for a
 one-table db) is an authoritative column-order prefix — it steers `trim` and
-`summary`, never `raw`, and a column it names is never dropped by rules 0/3/5/7.
+`summary`, never `raw`, and a column it names is never dropped by rules 0/3/5/7/9.
