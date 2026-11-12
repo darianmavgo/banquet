@@ -29,3 +29,25 @@ The **Banquet Bar** is the primary navigation and address input for Banquet inte
    Users can traverse the dropdown via `↑`/`↓`, accept completions via `Tab`, evaluate highlighted items immediately with `Enter`, or dismiss with `Esc`.
 9. **Session Back / Forward Navigation**:
    Clients MUST support browser-style session navigation using `Alt+←` / `Alt+→` (or `Ctrl+[` / `Ctrl+]` in terminals). Navigating backward re-evaluates and displays the previous URL in the session stack; navigating forward re-evaluates the subsequent URL. Divergent navigation from an earlier point in history prunes subsequent forward history.
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+**Context reflection / editable bar (rules 1–3)** — the bar is at the top and holds the canonical URL; after `↑` it recalls an earlier evaluated URL (rule 6):
+
+![history](img/bar-history.png)
+
+
+
+**Suggestion dropdown (rules 7–8)** — typing `dev` offers the `devices` table:
+
+![suggest](img/bar-suggest.png)
+
+
+
+**Session back (rule 9)** — `events` then Back returns to `devices`:
+
+![back](img/bar-back.png)

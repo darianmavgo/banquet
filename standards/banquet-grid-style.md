@@ -18,3 +18,23 @@ parenthetical notes reflect the reference implementation (`sqlite.mavgo.com`).
 
 The SQL or active Banquet URL behind whatever the grid is showing SHOULD be visible to the user in the [Banquet Bar](banquet-bar-style.md).
 
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+**BLOB placeholder (rule 2)** — `raw_payload` renders as `<BLOB: n bytes>`; numbers are thousands-separated (rule 3):
+
+![blob](img/grid-blob.png)
+
+
+
+**Zero rows (rule 4)** — `devices/status=NOPE` shows "No results found" and keeps the headers:
+
+![empty](img/grid-empty.png)
+
+
+
+Not yet captured: group-header tint and prefix blanking (rule 3 second item).

@@ -52,3 +52,13 @@ This standard controls the default display when a user requests a datastore or a
    - `_style`: Contains column-order hints (see [query-style.md](banquet-query-style.md)); `title` = the container's last segment.
 3. **Interactivity**: Each row in the database list table MUST be navigable via the `open` path. `open` is a Banquet path that opens that dataset (or dataset + table).
 4. **Behavior**: The catalog opens in **trim** kind. An empty container yields an empty catalog (0 rows), not an error. Because the catalog is itself a real (in-memory) SQLite database, every Banquet clause — sort, slice, `where`, `select` — applies to it unchanged. `/` is just the empty-container case of the same rule.
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+`testdata/` (no recognised extension) opens the synthetic catalog in a grid with an **Open** action per row (Part 2, rules 1, 3, 4):
+
+![db list](img/url-collection.png)

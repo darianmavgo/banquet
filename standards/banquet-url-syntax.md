@@ -69,3 +69,49 @@ Full specification: [`docs/collections.md`](docs/collections.md).
 
 
 
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+**Explicit notation** — `sample.db;devices` opens table `devices` (§1):
+
+![explicit](img/url-explicit.png)
+
+
+
+**Familiar syntax** — `sample.db/devices` (§2):
+
+![familiar](img/url-familiar.png)
+
+
+
+**Slice** — `telemetry[10:20]` shows rows 11–20 of 10,000 (§4):
+
+![slice](img/url-slice.png)
+
+
+
+**Sort** — `devices/-battery_pct` descending (§5):
+
+![sort](img/url-sort.png)
+
+
+
+**Equality filter** — `devices/status!=ONLINE`; the bar canonicalises it to a `where` (§6):
+
+![filter](img/url-filter.png)
+
+
+
+**Bare query condition** — `devices?battery_pct<50` is a `WHERE` with no `where=` (§6):
+
+![where](img/url-query-where.png)
+
+
+
+**Collection** — a path with no dataset extension (`testdata/`) opens the catalog (§7):
+
+![collection](img/url-collection.png)

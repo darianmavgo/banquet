@@ -40,3 +40,29 @@ Rules, most significant first:
 A `_style` / `_head` row keyed `"<table>.columns"` (or bare `"columns"` for a
 one-table db) is an authoritative column-order prefix — it steers `trim` and
 `summary`, never `raw`, and a column it names is never dropped by rules 0/3/5/7/9.
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+Demo table `orders` has 10 columns: pk `order_id` last, an all-null `empty_col`, a `row_num`, `created_at`, `uuid`.
+
+
+
+**`trim` (default)** — 6 of 10 columns: pk first, name-like next, then status/category, amount, free text last; null, row-number and technical columns dropped (rules 0, 1, 2, 3, 5, 6, 9):
+
+![trim](img/query-trim.png)
+
+
+
+**`raw`** — the uncapped view with every column, in table order (rule 8):
+
+![raw](img/query-raw.png)
+
+
+
+**`summary`** — groups by the low-cardinality columns `region` and `status` (rule 4):
+
+![summary](img/query-summary.png)

@@ -11,3 +11,17 @@ This standard controls what displays when listing all tables within a specific d
 5. **Sorting**: The sequence of tables MUST be ordered by category: Tiny (1-19 rows) first, then Large (20+ rows), then Empty (0 rows). Within categories, sort by row count descending.
 6. **Empty Tables**: Empty tables MUST output exactly 1 row with a placeholder (e.g., `(Empty)`).
 7. **Headers**: Each grid MUST be preceded by a distinct header indicating the table name, row count, and column count (e.g., `=== Table: steps (3152 rows, 11 columns) ===`).
+
+## sqlswift reference screenshots
+
+*Captured from the sqlswift dev app (`scripts/gui-access.sh`, `snapshot` UI command). The bar shows the canonical URL for each view.*
+
+
+
+`banquet-demo.db/tables` — stacked per-table grids with `=== Table: name (rows, columns) ===` headers, tiny tables first, then large (first 20 rows only, `500~` rows):
+
+![table list](img/table-list.png)
+
+
+
+Not yet captured: the `(Empty)` placeholder for `audit_log` (scroll below the fold).
